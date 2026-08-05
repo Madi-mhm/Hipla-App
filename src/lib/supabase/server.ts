@@ -2,8 +2,14 @@
  * Client Supabase côté serveur (composants serveur, routes, actions).
  * Lit et écrit la session dans les cookies.
  */
-import { createServerClient } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+
+type CookieAPoser = {
+  name: string;
+  value: string;
+  options?: CookieOptions;
+};
 
 export async function createClient() {
   const cookieStore = await cookies();
@@ -16,11 +22,11 @@ export async function createClient() {
         getAll() {
           return cookieStore.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesAPoser: CookieAPoser[]) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
+            cookiesAPoser.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
           } catch {
             // Appelé depuis un composant serveur : le middleware rafraîchira
             // la session. Sans conséquence.
