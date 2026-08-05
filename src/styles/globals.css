@@ -306,3 +306,38 @@ table { width: 100%; border-collapse: collapse; }
 
 .muted { color: var(--g-500); }
 .mono { font-family: var(--mono); font-size: 0.9em; }
+
+/* ============================================================
+   IMPRESSION
+   Le récapitulatif destiné à l'assemblée générale doit sortir seul :
+   ni navigation, ni boutons, ni fonds colorés.
+   Placé ici et non dans un module CSS : les modules n'acceptent pas
+   de règle composée uniquement de sélecteurs globaux.
+   ============================================================ */
+@media print {
+  aside,
+  header,
+  .btn,
+  .badge,
+  .sans-impression {
+    display: none !important;
+  }
+
+  body { background: #fff; }
+  .shell { display: block; }
+  .content { padding: 0; }
+
+  .card {
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    page-break-inside: avoid;
+  }
+
+  /* Les tableaux ne doivent pas défiler sur papier */
+  .table-scroll { overflow: visible; }
+  table { font-size: 11pt; }
+  .col-secondaire { display: table-cell !important; }
+
+  a[href]::after { content: none !important; }
+}

@@ -36,8 +36,9 @@ const NAVIGATION: Groupe[] = [
   {
     titre: 'Comptabilité',
     entrees: [
-      { libelle: 'Dépenses', href: '/depenses', disponible: false, ronde: 2, module: 'depenses' },
-      { libelle: 'Frais de création', href: '/frais-creation', disponible: false, ronde: 3, module: 'depenses' },
+      { libelle: 'Dépenses', href: '/depenses', disponible: true, module: 'depenses' },
+      { libelle: 'Déplacements', href: '/deplacements', disponible: true, module: 'depenses' },
+      { libelle: 'Frais de création', href: '/frais-creation', disponible: true, module: 'depenses' },
       { libelle: 'Abonnements', href: '/abonnements', disponible: false, ronde: 5, module: 'abonnements' },
       { libelle: 'Banque', href: '/banque', disponible: false, ronde: 6, module: 'banque' },
       { libelle: 'Ventes', href: '/ventes', disponible: false, ronde: 8, module: 'ventes' },
@@ -59,6 +60,8 @@ const NAVIGATION: Groupe[] = [
     titre: 'Réglages',
     entrees: [
       { libelle: 'Entreprise', href: '/reglages/entreprise', disponible: true, module: 'entreprise' },
+      { libelle: 'Catégories', href: '/reglages/categories', disponible: true, module: 'depenses' },
+      { libelle: 'Véhicules', href: '/reglages/vehicules', disponible: true, module: 'depenses' },
       { libelle: 'Utilisateurs', href: '/reglages/utilisateurs', disponible: true, module: 'utilisateurs' },
       { libelle: 'Sauvegardes', href: '/reglages/sauvegardes', disponible: false, ronde: 4, module: 'entreprise' },
     ],

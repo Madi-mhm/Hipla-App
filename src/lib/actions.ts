@@ -1,0 +1,217 @@
+/**
+ * MOTEUR DU CENTRE D'ACTION
+ *
+ * Chaque règle produit des actions. Une action disparaît quand la condition
+ * qui l'a créée disparaît — jamais par un clic « vu ». C'est ce qui évite
+ * qu'un centre d'action devienne une liste que l'on ignore.
+ */
+
+import { createClient } from '@/lib/supabase/server';
+import { daysUntil } from '@/lib/format';
+
+export type Urgence = 'bloquant' | 'important' | 'a_faire' | 'info';
+
+export type Action = {
+  id: string;
+  urgence: Urgence;
+  titre: string;
+  detail?: string;
+  href: string;
+  libelleLien: string;
+  compte?: number;
+};
+
+const ORDRE: Record<Urgence, number> = {
+  bloquant: 0, important: 1, a_faire: 2, info: 3,
+};
+
+export const LIBELLE_URGENCE: Record<Urgence, string> = {
+  bloquant: 'Bloquant',
+  important: 'Important',
+  a_faire: 'À faire',
+  info: 'Information',
+};
+
+export const CLASSE_URGENCE: Record<Urgence, string> = {
+  bloquant: 'badge--danger',
+  important: 'badge--warning',
+  a_faire: 'badge--info',
+  info: 'badge--neutral',
+};
+
+/** Échéances de l'exercice. Passeront en base à la ronde 10. */
+export const ECHEANCES = [
+  { libelle: 'Déclaration initiale CFE (formulaire 1447-C)', date: '2026-12-31' },
+  { libelle: 'Clôture du premier exercice', date: '2027-09-30' },
+  { libelle: 'Déclaration de TVA CA12E', date: '2027-12-31' },
+  { libelle: 'Liasse fiscale (2065)', date: '2027-12-31' },
+];
+
+export async function construireActions(peutValider: boolean): Promise<Action[]> {
+  const supabase = await createClient();
+  const actions: Action[] = [];
+
+  const [depenses, deplacements, justificatifs, vehicules, frais] = await Promise.all([
+    supabase.from('depenses').select('id, statut, fournisseur, montant_ttc, date_depense'),
+    supabase.from('deplacements').select('id, statut, depart, arrivee'),
+    supabase.from('justificatifs').select('depense_id'),
+    supabase.from('vehicules').select('id, libelle, date_ct').eq('actif', true),
+    supabase.from('frais_creation').select('id, statut_reprise, montant_ttc'),
+  ]);
+
+  const lignesDep = depenses.data ?? [];
+  const lignesDepl = deplacements.data ?? [];
+  const avecJustif = new Set((justificatifs.data ?? []).map((j) => j.depense_id));
+
+  // ---- BLOQUANT : dépense validée sans justificatif ----
+  // Sans pièce, la charge n'est pas déductible et la TVA pas récupérable.
+  const sansJustif = lignesDep.filter(
+    (d) => d.statut === 'validee' && !avecJustif.has(d.id)
+  );
+  if (sansJustif.length > 0) {
+    actions.push({
+      id: 'sans-justificatif',
+      urgence: 'bloquant',
+      titre: `${sansJustif.length} dépense${sansJustif.length > 1 ? 's' : ''} sans justificatif`,
+      detail: "Sans pièce, la charge n'est pas déductible et la TVA n'est pas récupérable.",
+      href: '/depenses?filtre=sans-justificatif',
+      libelleLien: 'Compléter',
+      compte: sansJustif.length,
+    });
+  }
+
+  // ---- IMPORTANT : frais de création non ratifiés ----
+  // Sans ratification, ces dépenses restent personnelles : ni déductibles,
+  // ni récupérables en TVA.
+  const aRatifier = (frais.data ?? []).filter((f) => f.statut_reprise === 'a_valider');
+  if (aRatifier.length > 0) {
+    const total = aRatifier.reduce((s, f) => s + Number(f.montant_ttc), 0);
+    actions.push({
+      id: 'frais-a-ratifier',
+      urgence: 'important',
+      titre: `${aRatifier.length} frais de création à ratifier`,
+      detail: `${total.toFixed(2).replace('.', ',')} € engagés avant l'immatriculation. Sans ratification en AG, ces dépenses restent personnelles.`,
+      href: '/frais-creation',
+      libelleLien: 'Traiter',
+      compte: aRatifier.length,
+    });
+  }
+
+  // ---- BLOQUANT : échéance à moins de 7 jours ----
+  for (const e of ECHEANCES) {
+    const j = daysUntil(e.date);
+    if (j >= 0 && j <= 7) {
+      actions.push({
+        id: `echeance-${e.date}`,
+        urgence: 'bloquant',
+        titre: e.libelle,
+        detail: `Échéance dans ${j} jour${j > 1 ? 's' : ''}.`,
+        href: '/echeances',
+        libelleLien: 'Voir',
+      });
+    }
+  }
+
+  // ---- IMPORTANT : saisies en attente de validation ----
+  if (peutValider) {
+    const depAttente = lignesDep.filter((d) => d.statut === 'en_attente');
+    if (depAttente.length > 0) {
+      actions.push({
+        id: 'depenses-attente',
+        urgence: 'important',
+        titre: `${depAttente.length} dépense${depAttente.length > 1 ? 's' : ''} à valider`,
+        detail: depAttente.slice(0, 3).map((d) => d.fournisseur).join(', ')
+          + (depAttente.length > 3 ? '…' : ''),
+        href: '/depenses',
+        libelleLien: 'Valider',
+        compte: depAttente.length,
+      });
+    }
+
+    const deplAttente = lignesDepl.filter((d) => d.statut === 'en_attente');
+    if (deplAttente.length > 0) {
+      actions.push({
+        id: 'deplacements-attente',
+        urgence: 'important',
+        titre: `${deplAttente.length} trajet${deplAttente.length > 1 ? 's' : ''} à valider`,
+        detail: deplAttente.slice(0, 3).map((d) => `${d.depart} → ${d.arrivee}`).join(', ')
+          + (deplAttente.length > 3 ? '…' : ''),
+        href: '/deplacements',
+        libelleLien: 'Valider',
+        compte: deplAttente.length,
+      });
+    }
+  }
+
+  // ---- IMPORTANT : échéance à moins de 30 jours ----
+  for (const e of ECHEANCES) {
+    const j = daysUntil(e.date);
+    if (j > 7 && j <= 30) {
+      actions.push({
+        id: `echeance-${e.date}`,
+        urgence: 'important',
+        titre: e.libelle,
+        detail: `Échéance dans ${j} jours.`,
+        href: '/echeances',
+        libelleLien: 'Voir',
+      });
+    }
+  }
+
+  // ---- À FAIRE : contrôle technique à moins de 60 jours ----
+  for (const v of vehicules.data ?? []) {
+    if (!v.date_ct) continue;
+    const j = daysUntil(v.date_ct);
+    if (j >= 0 && j <= 60) {
+      actions.push({
+        id: `ct-${v.id}`,
+        urgence: j <= 15 ? 'important' : 'a_faire',
+        titre: `Contrôle technique — ${v.libelle}`,
+        detail: `À passer dans ${j} jours.`,
+        href: '/reglages/vehicules',
+        libelleLien: 'Voir',
+      });
+    } else if (j < 0) {
+      actions.push({
+        id: `ct-${v.id}`,
+        urgence: 'bloquant',
+        titre: `Contrôle technique dépassé — ${v.libelle}`,
+        detail: `Échu depuis ${Math.abs(j)} jours.`,
+        href: '/reglages/vehicules',
+        libelleLien: 'Voir',
+      });
+    }
+  }
+
+  // ---- À FAIRE : rejets à corriger, pour le contributeur ----
+  const rejetees = lignesDep.filter((d) => d.statut === 'rejetee');
+  if (!peutValider && rejetees.length > 0) {
+    actions.push({
+      id: 'depenses-rejetees',
+      urgence: 'a_faire',
+      titre: `${rejetees.length} dépense${rejetees.length > 1 ? 's' : ''} rejetée${rejetees.length > 1 ? 's' : ''}`,
+      detail: 'À corriger et soumettre à nouveau.',
+      href: '/depenses',
+      libelleLien: 'Corriger',
+      compte: rejetees.length,
+    });
+  }
+
+  // ---- INFO : échéance suivante ----
+  const prochaine = ECHEANCES
+    .map((e) => ({ ...e, j: daysUntil(e.date) }))
+    .filter((e) => e.j > 30)
+    .sort((a, b) => a.j - b.j)[0];
+  if (prochaine) {
+    actions.push({
+      id: 'prochaine-echeance',
+      urgence: 'info',
+      titre: prochaine.libelle,
+      detail: `Dans ${prochaine.j} jours.`,
+      href: '/echeances',
+      libelleLien: 'Voir',
+    });
+  }
+
+  return actions.sort((a, b) => ORDRE[a.urgence] - ORDRE[b.urgence]);
+}

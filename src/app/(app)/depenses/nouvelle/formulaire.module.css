@@ -1,0 +1,114 @@
+.form { display: flex; flex-direction: column; gap: 1rem; max-width: 780px; }
+
+.grille {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+}
+.pleine { grid-column: 1 / -1; }
+
+.champ { display: flex; flex-direction: column; gap: 0.3rem; }
+.champ > span {
+  font-family: var(--display); font-size: 0.68rem; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--g-500);
+}
+.champ input,
+.champ select,
+.champ textarea {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--g-300);
+  border-radius: var(--radius);
+  background: var(--g-50);
+  font-size: var(--fs-base);
+  min-height: 42px;
+  width: 100%;
+}
+.champ textarea { min-height: 66px; resize: vertical; }
+.champ input:focus, .champ select:focus, .champ textarea:focus { background: var(--g-0); }
+
+/* iOS zoome automatiquement sous 16 px : on force la taille sur mobile. */
+@media (max-width: 768px) {
+  .champ input, .champ select, .champ textarea { font-size: 16px; }
+}
+
+.bascule { display: flex; gap: 0.4rem; margin-bottom: 0.9rem; }
+.bascule button {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid var(--g-300);
+  border-radius: var(--radius);
+  background: var(--g-50);
+  font-family: var(--display);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--g-600);
+  cursor: pointer;
+  min-height: 40px;
+}
+.basculeActif {
+  background: var(--navy) !important;
+  color: var(--bone) !important;
+  border-color: var(--navy) !important;
+}
+
+.recap {
+  background: var(--g-50);
+  border: 1px solid var(--g-200);
+  border-radius: var(--radius);
+  padding: 0.8rem 1rem;
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.4rem;
+}
+.recap > div { display: flex; justify-content: space-between; align-items: baseline; font-size: var(--fs-sm); }
+.recap span { color: var(--g-500); }
+.recap strong { font-family: var(--display); }
+.recapDeduct {
+  border-top: 1px solid var(--g-300);
+  padding-top: 0.45rem;
+  margin-top: 0.2rem;
+  color: var(--success) !important;
+}
+.recapDeduct strong { color: var(--success); }
+
+.alerteOrange,
+.alerteRouge {
+  font-size: var(--fs-sm);
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius);
+  margin-top: 0.85rem;
+  line-height: 1.45;
+}
+.alerteOrange { background: var(--warning-bg); color: var(--warning); }
+.alerteRouge { background: var(--danger-bg); color: var(--danger); }
+
+.fichier {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px dashed var(--g-300);
+  border-radius: var(--radius);
+  background: var(--g-50);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.listeFichiers { list-style: none; padding: 0; margin-top: 0.7rem; display: grid; gap: 0.35rem; }
+.listeFichiers li {
+  display: flex; align-items: center; gap: 0.6rem;
+  font-size: var(--fs-sm);
+  background: var(--g-50);
+  border: 1px solid var(--g-200);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.6rem;
+}
+.listeFichiers li > span:first-child { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.listeFichiers button {
+  background: none; border: none; color: var(--danger);
+  font-size: var(--fs-xs); cursor: pointer; text-decoration: underline;
+}
+
+.actions { display: flex; gap: 0.7rem; flex-wrap: wrap; }
+@media (max-width: 520px) {
+  .actions { flex-direction: column; }
+  .actions .btn { width: 100%; }
+}
