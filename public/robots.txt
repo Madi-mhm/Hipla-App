@@ -1,0 +1,3 @@
+# Application de gestion interne. Ne doit jamais être indexée.
+User-agent: *
+Disallow: /

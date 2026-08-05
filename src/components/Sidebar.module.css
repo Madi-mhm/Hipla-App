@@ -1,0 +1,113 @@
+.sidebar {
+  background: var(--navy);
+  color: var(--bone);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.marque {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+  text-decoration: none;
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid rgba(245, 243, 239, 0.1);
+  flex-shrink: 0;
+}
+.marqueNom {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: 0.28em;
+  color: var(--bone);
+}
+.marqueSuite {
+  font-family: var(--display);
+  font-size: 0.55rem;
+  font-weight: 500;
+  letter-spacing: 0.38em;
+  color: var(--gold-soft);
+  margin-top: 0.4rem;
+  padding-left: 2px;
+}
+
+.nav {
+  flex: 1;
+  padding: 1rem 0.6rem;
+}
+
+.groupe { margin-bottom: 1.4rem; }
+.groupe ul { list-style: none; padding: 0; }
+
+.groupeTitre {
+  font-family: var(--display);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(245, 243, 239, 0.42);
+  padding: 0 0.65rem;
+  margin-bottom: 0.4rem;
+}
+
+.lien {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--radius);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+  color: rgba(245, 243, 239, 0.82);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.lien:hover { background: rgba(245, 243, 239, 0.07); color: var(--bone); }
+
+.lienActif {
+  background: rgba(224, 185, 120, 0.14);
+  color: var(--gold-soft);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--gold);
+}
+
+.lienInactif {
+  color: rgba(245, 243, 239, 0.3);
+  cursor: not-allowed;
+}
+.lienInactif:hover { background: none; color: rgba(245, 243, 239, 0.3); }
+
+.ronde {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: rgba(245, 243, 239, 0.22);
+  border: 1px solid rgba(245, 243, 239, 0.14);
+  border-radius: 3px;
+  padding: 0 0.25rem;
+}
+
+.pied {
+  padding: 0.9rem 1.25rem;
+  border-top: 1px solid rgba(245, 243, 239, 0.1);
+  flex-shrink: 0;
+}
+.piedTexte {
+  font-family: var(--display);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(245, 243, 239, 0.65);
+}
+.piedDetail {
+  font-size: 0.68rem;
+  color: rgba(245, 243, 239, 0.35);
+  margin-top: 0.15rem;
+}
+
+@media (max-width: 900px) {
+  .sidebar { position: static; height: auto; }
+  .nav { display: none; }
+}
