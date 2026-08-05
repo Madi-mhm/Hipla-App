@@ -136,6 +136,42 @@ textarea {
 }
 
 /* ============================================================
+   BARRES DE DÉFILEMENT
+   Discrètes, dans la charte. Firefox utilise scrollbar-width,
+   les navigateurs WebKit les pseudo-éléments.
+   ============================================================ */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-300) transparent;
+}
+
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--g-300);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--g-400); background-clip: content-box; }
+*::-webkit-scrollbar-corner { background: transparent; }
+
+/* Sur fond bleu nuit, une piste claire serait trop contrastée. */
+.sidebarSombre,
+aside {
+  scrollbar-color: rgba(245, 243, 239, 0.22) transparent;
+}
+aside::-webkit-scrollbar-thumb {
+  background: rgba(245, 243, 239, 0.2);
+  background-clip: content-box;
+}
+aside::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 243, 239, 0.34);
+  background-clip: content-box;
+}
+
+/* ============================================================
    MISE EN PAGE GÉNÉRALE
    ============================================================ */
 
@@ -157,8 +193,34 @@ textarea {
 }
 
 @media (max-width: 900px) {
+  /* La barre latérale devient un tiroir superposé : une seule colonne. */
   .shell { grid-template-columns: 1fr; }
-  .content { padding: 1.25rem 1rem 3rem; }
+  .content { padding: 1rem 0.9rem 3rem; }
+}
+
+@media (max-width: 560px) {
+  .content { padding: 0.85rem 0.75rem 3rem; }
+}
+
+/* ============================================================
+   TABLEAUX RESPONSIFS
+   Un tableau de comptabilité ne se réduit pas indéfiniment.
+   On le laisse défiler horizontalement dans son conteneur plutôt
+   que de casser la mise en page.
+   ============================================================ */
+
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-inline: calc(-1 * var(--pad-carte, 1.25rem));
+  padding-inline: var(--pad-carte, 1.25rem);
+}
+
+table { width: 100%; border-collapse: collapse; }
+
+/* Masque une colonne secondaire sur très petit écran. */
+@media (max-width: 560px) {
+  .col-secondaire { display: none; }
 }
 
 /* ============================================================
@@ -171,6 +233,11 @@ textarea {
   border-radius: var(--radius);
   padding: 1.25rem;
   box-shadow: var(--shadow-sm);
+  --pad-carte: 1.25rem;
+}
+
+@media (max-width: 560px) {
+  .card { padding: 1rem; --pad-carte: 1rem; }
 }
 
 .card__title {
@@ -187,6 +254,9 @@ textarea {
   display: grid;
   gap: 1rem;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
+@media (max-width: 560px) {
+  .grid-cards { gap: 0.75rem; }
 }
 
 .badge {
@@ -215,7 +285,7 @@ textarea {
   font-size: var(--fs-sm);
   font-weight: 600;
   padding: 0.55rem 1rem;
-  min-height: 38px;
+  min-height: 42px;   /* cible tactile confortable */
   border: 1px solid transparent;
   border-radius: var(--radius);
   background: transparent;

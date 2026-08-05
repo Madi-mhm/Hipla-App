@@ -1,15 +1,16 @@
-/**
- * Bandeau supérieur. Affiche le contexte (titre de page) et, à terme,
- * l'utilisateur connecté et les alertes non traitées.
- */
 import styles from './Header.module.css';
+import { profilCourant } from '@/lib/auth';
+import { LIBELLE_ROLE } from '@/lib/permissions';
+import BoutonDeconnexion from './BoutonDeconnexion';
 
 type Props = {
   titre: string;
   sousTitre?: string;
 };
 
-export default function Header({ titre, sousTitre }: Props) {
+export default async function Header({ titre, sousTitre }: Props) {
+  const profil = await profilCourant();
+
   return (
     <header className={styles.header}>
       <div>
@@ -18,8 +19,17 @@ export default function Header({ titre, sousTitre }: Props) {
       </div>
 
       <div className={styles.actions}>
-        {/* Ronde 1 : utilisateur connecté et déconnexion */}
-        <span className={styles.placeholder}>Non connecté</span>
+        {profil ? (
+          <>
+            <div className={styles.utilisateur}>
+              <span className={styles.nom}>{profil.nom_complet}</span>
+              <span className={styles.role}>{LIBELLE_ROLE[profil.role]}</span>
+            </div>
+            <BoutonDeconnexion />
+          </>
+        ) : (
+          <span className={styles.placeholder}>Non connecté</span>
+        )}
       </div>
     </header>
   );

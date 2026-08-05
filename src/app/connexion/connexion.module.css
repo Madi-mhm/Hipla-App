@@ -1,0 +1,69 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  background: var(--navy);
+  padding: 1.5rem;
+}
+
+.carte {
+  background: var(--g-0);
+  border-radius: var(--radius);
+  padding: 2.25rem 2rem;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.5);
+}
+
+.marque { display: flex; flex-direction: column; line-height: 1; margin-bottom: 1.1rem; }
+.marqueNom {
+  font-family: var(--display); font-weight: 700; font-size: 1.5rem;
+  letter-spacing: 0.3em; color: var(--navy);
+}
+.marqueSuite {
+  font-family: var(--display); font-size: 0.58rem; font-weight: 500;
+  letter-spacing: 0.4em; color: var(--gold-ink); margin-top: 0.45rem; padding-left: 3px;
+}
+
+.intro { font-size: var(--fs-sm); color: var(--g-500); margin-bottom: 1.6rem; }
+
+.form { display: flex; flex-direction: column; gap: 1rem; }
+
+.champ { display: flex; flex-direction: column; gap: 0.35rem; }
+.champ span {
+  font-family: var(--display); font-size: 0.68rem; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--g-500);
+}
+.champ input {
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--g-300);
+  border-radius: var(--radius);
+  background: var(--g-50);
+  font-size: var(--fs-base);
+  min-height: 42px;
+}
+.champ input:focus { background: var(--g-0); }
+
+.erreur {
+  font-size: var(--fs-sm);
+  color: var(--danger);
+  background: var(--danger-bg);
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius);
+}
+
+.pied { font-size: var(--fs-xs); color: rgba(245, 243, 239, 0.4); }
+
+@media (max-width: 480px) {
+  .page { padding: 1rem; justify-content: flex-start; padding-top: 3rem; }
+  .carte { padding: 1.75rem 1.35rem; }
+  .marqueNom { font-size: 1.3rem; letter-spacing: 0.26em; }
+}
+
+/* Empêche le zoom automatique d'iOS : il se déclenche sous 16px. */
+@media (max-width: 768px) {
+  .champ input { font-size: 16px; }
+}

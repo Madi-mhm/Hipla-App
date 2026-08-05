@@ -1,6 +1,8 @@
 import Header from '@/components/Header';
 import { createClient } from '@/lib/supabase/server';
 import { dateLong, daysUntil, money } from '@/lib/format';
+import { profilCourant } from '@/lib/auth';
+import { redirect } from 'next/navigation';
 
 /**
  * Centre d'action — page d'accueil.
@@ -28,6 +30,9 @@ async function testerConnexion() {
 }
 
 export default async function Page() {
+  const profil = await profilCourant();
+  if (!profil) redirect('/connexion');
+
   const etatSupabase = await testerConnexion();
   const ok = etatSupabase === 'Connexion établie';
 
@@ -38,7 +43,7 @@ export default async function Page() {
 
   return (
     <>
-      <Header titre="Centre d'action" sousTitre="Ce qu'il y a à faire aujourd'hui" />
+      <Header titre="Centre d'action" sousTitre={`Bonjour ${profil.nom_complet.split(' ')[0]} — ce qu'il y a à faire aujourd'hui`} />
 
       <div className="content">
         <div className="grid-cards" style={{ marginBottom: '1.5rem' }}>
@@ -87,7 +92,7 @@ export default async function Page() {
 
         <div className="card">
           <p className="card__title">Échéances de l'exercice</p>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--fs-sm)' }}>
+          <div className="table-scroll"><table style={{ minWidth: 480, fontSize: 'var(--fs-sm)' }}>
             <tbody>
               {ECHEANCES.map((e) => {
                 const j = daysUntil(e.date);
@@ -108,7 +113,7 @@ export default async function Page() {
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
         </div>
       </div>
     </>
