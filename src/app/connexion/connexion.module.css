@@ -47,6 +47,13 @@
 }
 .champ input:focus { background: var(--g-0); }
 
+.chargement {
+  font-size: var(--fs-sm);
+  color: var(--g-500);
+  padding: 2rem 0;
+  text-align: center;
+}
+
 .erreur {
   font-size: var(--fs-sm);
   color: var(--danger);
