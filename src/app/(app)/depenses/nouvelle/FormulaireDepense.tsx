@@ -67,7 +67,7 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
 
   async function ajouterFichiers(liste: FileList | null) {
     if (!liste) return;
-    const resultats = [];
+    const resultats: File[] = [];
     let origine = 0, finale = 0;
     for (const f of Array.from(liste)) {
       const r = await compresser(f);
