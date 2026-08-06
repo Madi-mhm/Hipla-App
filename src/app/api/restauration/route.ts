@@ -28,10 +28,18 @@ const ORDRE = [
   'categories',
   'vehicules',
   'bareme_km',
+  'fournisseurs_connus',
+  // Restauré avant les écritures : les numéros de pièce doivent
+  // reprendre là où ils s'étaient arrêtés, sans réattribution.
+  'compteurs_piece',
   'depenses',
   'frais_creation',
   'deplacements',
   'justificatifs',
+  'abonnements',
+  'abonnement_echeances',
+  'commentaires',
+  'taches',
 ] as const;
 
 /**
@@ -40,7 +48,12 @@ const ORDRE = [
  *   audit               → le journal du nouveau projet doit rester le sien
  *   sauvegardes         → historique propre à chaque installation
  */
-const EXCLUES = new Set(['profils', 'permissions', 'audit', 'sauvegardes']);
+const EXCLUES = new Set([
+  'profils', 'permissions',   // liés aux comptes du projet cible
+  'audit',                    // le journal d'une installation lui appartient
+  'sauvegardes',              // historique propre à chaque installation
+  'usage_ia',                 // consommation propre à chaque installation
+]);
 
 function admin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

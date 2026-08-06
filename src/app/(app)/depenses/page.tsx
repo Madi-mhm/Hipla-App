@@ -70,9 +70,12 @@ export default async function Page() {
         </div>
 
         {peutCreer && (
-          <div style={{ marginBottom: '1.25rem' }}>
-            <Link href="/depenses/nouvelle" className="btn btn--gold">
-              + Nouvelle dépense
+          <div style={{ marginBottom: '1.25rem', display: 'flex', gap: '.6rem', flexWrap: 'wrap' }}>
+            <Link href="/depenses/extraire" className="btn btn--gold">
+              Extraire une facture
+            </Link>
+            <Link href="/depenses/nouvelle" className="btn btn--ghost">
+              + Saisie manuelle
             </Link>
           </div>
         )}

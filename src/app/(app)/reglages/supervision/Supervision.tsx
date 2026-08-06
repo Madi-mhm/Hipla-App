@@ -39,11 +39,18 @@ type Props = {
   erreurR2: string | null;
   sauvegardes: Sauvegarde[];
   audit: { email: string; action: string; table_cible: string | null; horodatage: string }[];
+  usageIa: UsageIa[];
+};
+
+type UsageIa = {
+  id: string; horodatage: string; nom_fichier: string | null;
+  tokens_entree: number; tokens_sortie: number;
+  cout_estime: number; confiance: number | null; succes: boolean;
 };
 
 export default function Supervision({
   stats, tailleBase, quotaBase, quotaStorage, quotaR2,
-  r2, erreurR2, sauvegardes, audit,
+  r2, erreurR2, sauvegardes, audit, usageIa,
 }: Props) {
   const router = useRouter();
   const [enCours, setEnCours] = useState(false);
@@ -245,6 +252,90 @@ export default function Supervision({
         )}
       </div>
 
+      {/* ---------- Usage de l'intelligence artificielle ---------- */}
+      <div className="card" style={{ marginBottom: '1.25rem' }}>
+        <p className="card__title">Extraction de factures</p>
+        <div className={styles.quotas}>
+          <Quota
+            libelle="Extractions ce mois"
+            utilise={Number(stats?.ia?.extractions ?? 0)}
+            quota={Number(stats?.ia?.plafond ?? 100)}
+            detail={`${stats?.ia?.reussies ?? 0} réussies · ${stats?.ia?.echouees ?? 0} en échec · plafond mensuel`}
+            unite="extractions"
+          />
+        </div>
+
+        <div className="grid-cards" style={{ marginTop: '1rem' }}>
+          <div className="card" style={{ background: 'var(--g-50)' }}>
+            <p className="card__title">Coût du mois</p>
+            <p className="amount" style={{ fontSize: '1.2rem', fontFamily: 'var(--display)', fontWeight: 600 }}>
+              {Number(stats?.ia?.cout ?? 0).toFixed(4).replace('.', ',')} €
+            </p>
+          </div>
+          <div className="card" style={{ background: 'var(--g-50)' }}>
+            <p className="card__title">Coût depuis janvier</p>
+            <p className="amount" style={{ fontSize: '1.2rem', fontFamily: 'var(--display)', fontWeight: 600 }}>
+              {Number(stats?.ia_annuel?.cout ?? 0).toFixed(4).replace('.', ',')} €
+            </p>
+            <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.3rem' }}>
+              {stats?.ia_annuel?.extractions ?? 0} extractions
+            </p>
+          </div>
+          <div className="card" style={{ background: 'var(--g-50)' }}>
+            <p className="card__title">Coût moyen par facture</p>
+            <p className="amount" style={{ fontSize: '1.2rem', fontFamily: 'var(--display)', fontWeight: 600 }}>
+              {Number(stats?.ia_annuel?.cout_moyen ?? 0).toFixed(4).replace('.', ',')} €
+            </p>
+          </div>
+          <div className="card" style={{ background: 'var(--g-50)' }}>
+            <p className="card__title">Confiance moyenne</p>
+            <p className="amount" style={{ fontSize: '1.2rem', fontFamily: 'var(--display)', fontWeight: 600 }}>
+              {Math.round(Number(stats?.ia_annuel?.confiance_moyenne ?? 0) * 100)} %
+            </p>
+          </div>
+        </div>
+
+        {usageIa.length > 0 && (
+          <div className="table-scroll" style={{ marginTop: '1rem' }}>
+            <table style={{ minWidth: 520, fontSize: 'var(--fs-sm)' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--g-300)' }}>
+                  <th style={th}>Date</th>
+                  <th style={th}>Fichier</th>
+                  <th style={{ ...th, textAlign: 'right' }} className="col-secondaire">Tokens</th>
+                  <th style={{ ...th, textAlign: 'right' }}>Coût</th>
+                  <th style={{ ...th, textAlign: 'right' }}>Confiance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {usageIa.map((u) => (
+                  <tr key={u.id} style={{ borderBottom: '1px solid var(--g-200)' }}>
+                    <td style={td}>{new Date(u.horodatage).toLocaleString('fr-FR')}</td>
+                    <td style={td}>
+                      {u.nom_fichier ?? '—'}
+                      {!u.succes && (
+                        <span className="badge badge--danger" style={{ marginLeft: '.4rem' }}>échec</span>
+                      )}
+                    </td>
+                    <td style={{ ...td, textAlign: 'right' }} className="amount col-secondaire">
+                      {u.tokens_entree + u.tokens_sortie}
+                    </td>
+                    <td style={{ ...td, textAlign: 'right' }} className="amount">
+                      {Number(u.cout_estime).toFixed(5).replace('.', ',')} €
+                    </td>
+                    <td style={{ ...td, textAlign: 'right' }}>
+                      {u.confiance !== null
+                        ? `${Math.round(Number(u.confiance) * 100)} %`
+                        : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* ---------- Volumétrie ---------- */}
       <div className="card" style={{ marginBottom: '1.25rem' }}>
         <p className="card__title">Données</p>
@@ -329,10 +420,10 @@ export default function Supervision({
 }
 
 function Quota({
-  libelle, utilise, quota, detail, indisponible,
+  libelle, utilise, quota, detail, indisponible, unite,
 }: {
   libelle: string; utilise: number; quota: number;
-  detail?: string; indisponible?: boolean;
+  detail?: string; indisponible?: boolean; unite?: string;
 }) {
   const pct = quota > 0 ? (utilise / quota) * 100 : 0;
   const couleur = pct >= 90 ? 'var(--danger)' : pct >= 70 ? 'var(--warning)' : 'var(--success)';
@@ -342,7 +433,11 @@ function Quota({
       <div className={styles.quotaEntete}>
         <span className={styles.quotaLibelle}>{libelle}</span>
         <span className="amount" style={{ fontSize: 'var(--fs-sm)', fontWeight: 600 }}>
-          {indisponible ? '—' : `${poidsLisible(utilise)} / ${poidsLisible(quota)}`}
+          {indisponible
+            ? '—'
+            : unite
+              ? `${utilise} / ${quota}`
+              : `${poidsLisible(utilise)} / ${poidsLisible(quota)}`}
         </span>
       </div>
       <div className={styles.barre}>

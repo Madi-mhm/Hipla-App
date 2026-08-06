@@ -22,10 +22,13 @@ export const maxDuration = 300;
 /** Tables sauvegardées, dans l'ordre des dépendances. */
 const TABLES = [
   'entreprise', 'exercices', 'profils', 'permissions',
-  'categories', 'vehicules', 'bareme_km',
+  'categories', 'vehicules', 'bareme_km', 'fournisseurs_connus',
+  // Les compteurs doivent suivre : sans eux, une restauration
+  // réattribuerait des numéros de pièce déjà utilisés.
+  'compteurs_piece',
   'depenses', 'justificatifs', 'deplacements', 'frais_creation',
   'abonnements', 'abonnement_echeances', 'commentaires', 'taches',
-  'sauvegardes', 'audit',
+  'usage_ia', 'sauvegardes', 'audit',
 ] as const;
 
 /** Dumps hebdomadaires conservés, en semaines. Les dumps du 1er du mois sont gardés. */

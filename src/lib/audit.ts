@@ -20,6 +20,31 @@ const IGNORES = new Set([
 /** Libellés lisibles pour l'affichage. */
 export const LIBELLE_CHAMP: Record<string, string> = {
   numero_piece: 'Numéro de pièce',
+  numero_facture_fournisseur: 'N° de facture du fournisseur',
+  siret_fournisseur: 'SIRET du fournisseur',
+  tva_fournisseur: 'N° TVA du fournisseur',
+  extrait_par_ia: 'Extrait automatiquement',
+  confiance: 'Indice de confiance',
+  confiance_extraction: 'Indice de confiance',
+  periodicite: 'Périodicité',
+  autoliquidation: 'TVA autoliquidée',
+  pays_prestataire: 'Pays du prestataire',
+  engagement_jusquau: 'Engagement jusqu\'au',
+  preavis_jours: 'Préavis (jours)',
+  montant_prevu: 'Montant prévu',
+  montant_reel: 'Montant constaté',
+  date_effet: 'Date d\'effet',
+  motif_annulation: 'Motif d\'annulation',
+  motif_resiliation: 'Motif de résiliation',
+  echeances_supprimees: 'Échéances retirées',
+  justificatifs: 'Justificatifs joints',
+  abonnement: 'Abonnement',
+  piece: 'Pièce concernée',
+  reponse: 'Réponse apportée',
+  format: 'Format',
+  lignes: 'Lignes',
+  du: 'Du',
+  au: 'Au',
   date_depense: 'Date',
   date_engagement: 'Date',
   date_trajet: 'Date',
@@ -59,17 +84,26 @@ export const LIBELLE_ACTION: Record<string, string> = {
   ratification: 'Ratification',
   export: 'Export',
   sauvegarde: 'Sauvegarde',
+  extraction: 'Extraction',
+  resiliation: 'Résiliation',
+  annulation: 'Annulation',
 };
 
 export const LIBELLE_TABLE: Record<string, string> = {
   depenses: 'Dépense',
   frais_creation: 'Frais de création',
   deplacements: 'Déplacement',
+  abonnements: 'Abonnement',
+  abonnement_echeances: 'Échéance d\'abonnement',
+  commentaires: 'Signalement',
+  taches: 'Tâche',
+  justificatifs: 'Justificatif',
   categories: 'Catégorie',
   vehicules: 'Véhicule',
   entreprise: 'Entreprise',
   profils: 'Utilisateur',
   sauvegardes: 'Sauvegarde',
+  usage_ia: 'Extraction IA',
 };
 
 export const CLASSE_ACTION: Record<string, string> = {
@@ -83,6 +117,9 @@ export const CLASSE_ACTION: Record<string, string> = {
   connexion: 'badge--neutral',
   deconnexion: 'badge--neutral',
   sauvegarde: 'badge--info',
+  extraction: 'badge--info',
+  resiliation: 'badge--warning',
+  annulation: 'badge--danger',
 };
 
 /**

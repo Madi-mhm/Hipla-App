@@ -1,0 +1,123 @@
+.boutons { display: flex; gap: .7rem; flex-wrap: wrap; margin-bottom: .9rem; }
+
+.boutonPhoto { display: inline-flex; align-items: center; gap: .5rem; }
+.boutonPhoto svg {
+  width: 17px; height: 17px; flex-shrink: 0;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+
+.zone {
+  border: 1px dashed var(--g-300);
+  border-radius: var(--radius);
+  background: var(--g-50);
+  padding: 1.5rem 1rem;
+  text-align: center;
+  font-size: var(--fs-sm);
+  color: var(--g-500);
+}
+
+/* Le glisser-déposer n'a pas de sens au doigt */
+@media (max-width: 768px) {
+  .zone { display: none; }
+}
+
+.compteur { margin-top: .9rem; font-size: var(--fs-xs); }
+.barre {
+  height: 4px; background: var(--g-200);
+  border-radius: 999px; overflow: hidden; margin-top: .4rem;
+}
+.barreRemplie { height: 100%; border-radius: 999px; transition: width .3s ease; }
+
+/* ---------- Document et champs côte à côte ---------- */
+.grille {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 1.4rem;
+}
+@media (max-width: 900px) {
+  .grille { grid-template-columns: 1fr; }
+}
+
+.apercu { min-width: 0; }
+.apercu img,
+.apercu iframe {
+  width: 100%;
+  max-height: 460px;
+  object-fit: contain;
+  border: 1px solid var(--g-200);
+  border-radius: var(--radius);
+  background: var(--g-50);
+  display: block;
+}
+.apercu iframe { height: 460px; }
+
+.champs { min-width: 0; display: flex; flex-direction: column; }
+
+.centre {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: .8rem; padding: 2.5rem 1rem; text-align: center;
+  flex: 1;
+}
+
+.pulsation {
+  width: 28px; height: 28px;
+  border: 3px solid var(--g-200);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: rotation .8s linear infinite;
+}
+@keyframes rotation { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .pulsation { animation-duration: 2s; }
+}
+
+.entete { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .8rem; }
+
+.remarque {
+  font-size: var(--fs-sm); color: var(--warning);
+  background: var(--warning-bg);
+  padding: .55rem .75rem; border-radius: var(--radius);
+  margin-bottom: .8rem; line-height: 1.5;
+}
+
+.doublon {
+  font-size: var(--fs-sm); color: var(--danger);
+  background: var(--danger-bg);
+  padding: .6rem .8rem; border-radius: var(--radius);
+  margin-bottom: .8rem; line-height: 1.5;
+}
+.doublon strong { display: block; margin-bottom: .3rem; }
+.doublon p { font-size: var(--fs-xs); }
+
+.formulaire {
+  display: grid; gap: .7rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr));
+}
+.formulaire label { display: flex; flex-direction: column; gap: .25rem; }
+.formulaire span {
+  font-family: var(--display); font-size: .62rem; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--g-500);
+}
+.formulaire input,
+.formulaire select {
+  padding: .5rem .6rem;
+  border: 1px solid var(--g-300);
+  border-radius: var(--radius);
+  background: var(--g-50);
+  font-size: var(--fs-sm);
+  min-height: 40px; width: 100%;
+}
+@media (max-width: 768px) {
+  .formulaire input, .formulaire select { font-size: 16px; }
+}
+
+.actions {
+  display: flex; gap: .6rem; flex-wrap: wrap;
+  margin-top: 1.1rem; align-items: center;
+}
+@media (max-width: 560px) {
+  .actions { flex-direction: column; align-items: stretch; }
+  .actions .btn { width: 100%; margin-left: 0 !important; }
+}

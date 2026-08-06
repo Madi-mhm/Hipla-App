@@ -24,6 +24,11 @@ export default async function Page() {
       supabase.from('exercices').select('*').order('date_debut'),
     ]);
 
+  const { data: abos } = await supabase
+    .from('abonnements')
+    .select('*, categories(libelle)')
+    .order('date_debut');
+
   return (
     <>
       <Header titre="Exports" sousTitre="Extraction filtrée des écritures" />
@@ -32,6 +37,7 @@ export default async function Page() {
           depenses={dep ?? []}
           frais={frais ?? []}
           deplacements={depl ?? []}
+          abonnements={abos ?? []}
           categories={(cats ?? []) as Categorie[]}
           exercices={exs ?? []}
         />

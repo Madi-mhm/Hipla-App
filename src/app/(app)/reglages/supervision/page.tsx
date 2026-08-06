@@ -22,11 +22,14 @@ export default async function Page() {
 
   const supabase = await createClient();
 
-  const [stats, tailleBase, sauvegardes, audit] = await Promise.all([
+  const [stats, tailleBase, sauvegardes, audit, usageIa] = await Promise.all([
     supabase.rpc('statistiques_donnees'),
     supabase.rpc('taille_base'),
     supabase.from('sauvegardes').select('*').order('demarree_le', { ascending: false }).limit(10),
     supabase.from('audit').select('email, action, table_cible, horodatage')
+      .order('horodatage', { ascending: false }).limit(20),
+    supabase.from('usage_ia')
+      .select('id, horodatage, nom_fichier, tokens_entree, tokens_sortie, cout_estime, confiance, succes')
       .order('horodatage', { ascending: false }).limit(20),
   ]);
 
@@ -56,6 +59,7 @@ export default async function Page() {
           erreurR2={erreurR2}
           sauvegardes={sauvegardes.data ?? []}
           audit={audit.data ?? []}
+          usageIa={usageIa.data ?? []}
         />
       </div>
     </>

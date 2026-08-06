@@ -15,7 +15,7 @@ import { versCSV, versJSON, telecharger, dateFR, type Colonne } from '@/lib/expo
 import type { Categorie } from '@/lib/types';
 import styles from './exports.module.css';
 
-type Jeu = 'depenses' | 'frais' | 'deplacements';
+type Jeu = 'depenses' | 'frais' | 'deplacements' | 'abonnements';
 
 type LigneDepense = {
   numero_piece: string | null;
@@ -44,16 +44,27 @@ type LigneDeplacement = {
   vehicules?: { libelle: string };
 };
 
+type LigneAbonnement = {
+  numero_piece: string | null; date_debut: string; date_fin: string | null;
+  nom: string; fournisseur: string;
+  montant_ht: number; taux_tva: number; montant_tva: number; montant_ttc: number;
+  periodicite: string; statut: string; autoliquidation: boolean;
+  pays_prestataire: string; engagement_jusquau: string | null;
+  notes: string | null; categorie_id: string | null;
+  categories?: { libelle: string };
+};
+
 type Props = {
   depenses: LigneDepense[];
   frais: LigneFrais[];
   deplacements: LigneDeplacement[];
+  abonnements: LigneAbonnement[];
   categories: Categorie[];
   exercices: { date_debut: string; date_fin: string }[];
 };
 
 export default function Exports({
-  depenses, frais, deplacements, categories, exercices,
+  depenses, frais, deplacements, abonnements, categories, exercices,
 }: Props) {
   const [jeu, setJeu] = useState<Jeu>('depenses');
   const [periode, setPeriode] = useState('exercice');
@@ -117,11 +128,19 @@ export default function Exports({
         (!payePar || l.associe_payeur === payePar)
       );
     }
+    if (jeu === 'abonnements') {
+      return abonnements.filter((l) =>
+        dansPeriode(l.date_debut) &&
+        corrFournisseur(l.fournisseur) &&
+        (!categorieId || l.categorie_id === categorieId) &&
+        (!statut || l.statut === statut)
+      );
+    }
     return deplacements.filter((l) =>
       dansPeriode(l.date_trajet) &&
       (!statut || l.statut === statut)
     );
-  }, [jeu, depenses, frais, deplacements, bornes, categorieId, fournisseur, statut, payePar]);
+  }, [jeu, depenses, frais, deplacements, abonnements, bornes, categorieId, fournisseur, statut, payePar]);
 
   const totaux = useMemo(() => {
     if (jeu === 'deplacements') {
@@ -130,11 +149,18 @@ export default function Exports({
       );
       return { nombre: lignes.length, km };
     }
-    const l = lignes as (LigneDepense | LigneFrais)[];
+    // Un abonnement porte une TVA facturée mais pas encore déduite : elle
+    // ne le sera qu'à la constatation de l'échéance, qui crée la dépense.
+    // On additionne donc montant_tva pour les abonnements, tva_deductible
+    // pour les écritures effectivement comptabilisées.
+    const l = lignes as (LigneDepense | LigneFrais | LigneAbonnement)[];
+    const tvaDe = (x: LigneDepense | LigneFrais | LigneAbonnement) =>
+      'tva_deductible' in x ? Number(x.tva_deductible) : Number(x.montant_tva);
+
     return {
       nombre: l.length,
       ht: l.reduce((s, x) => s + Number(x.montant_ht), 0),
-      tva: l.reduce((s, x) => s + Number(x.tva_deductible), 0),
+      tva: l.reduce((s, x) => s + tvaDe(x), 0),
       ttc: l.reduce((s, x) => s + Number(x.montant_ttc), 0),
     };
   }, [lignes, jeu]);
@@ -178,6 +204,25 @@ export default function Exports({
         { entete: 'Mode de reprise', valeur: (l: LigneFrais) => l.mode_reprise },
         { entete: 'Statut', valeur: (l: LigneFrais) => l.statut_reprise },
         { entete: 'Notes', valeur: (l: LigneFrais) => l.notes ?? '' },
+      ] as unknown) as Colonne<never>[];
+    }
+    if (jeu === 'abonnements') {
+      return ([
+        { entete: 'Pièce', valeur: (l: LigneAbonnement) => l.numero_piece ?? '' },
+        { entete: 'Nom', valeur: (l: LigneAbonnement) => l.nom },
+        { entete: 'Fournisseur', valeur: (l: LigneAbonnement) => l.fournisseur },
+        { entete: 'Catégorie', valeur: (l: LigneAbonnement) => l.categories?.libelle ?? '' },
+        { entete: 'Montant HT', valeur: (l: LigneAbonnement) => Number(l.montant_ht) },
+        { entete: 'Taux TVA', valeur: (l: LigneAbonnement) => Number(l.taux_tva) },
+        { entete: 'Montant TTC', valeur: (l: LigneAbonnement) => Number(l.montant_ttc) },
+        { entete: 'Périodicité', valeur: (l: LigneAbonnement) => l.periodicite },
+        { entete: 'Début', valeur: (l: LigneAbonnement) => dateFR(l.date_debut) },
+        { entete: 'Fin', valeur: (l: LigneAbonnement) => dateFR(l.date_fin) },
+        { entete: 'Engagement jusqu\'au', valeur: (l: LigneAbonnement) => dateFR(l.engagement_jusquau) },
+        { entete: 'TVA autoliquidée', valeur: (l: LigneAbonnement) => (l.autoliquidation ? 'oui' : 'non') },
+        { entete: 'Pays', valeur: (l: LigneAbonnement) => l.pays_prestataire },
+        { entete: 'Statut', valeur: (l: LigneAbonnement) => l.statut },
+        { entete: 'Notes', valeur: (l: LigneAbonnement) => l.notes ?? '' },
       ] as unknown) as Colonne<never>[];
     }
     return ([
@@ -227,6 +272,7 @@ export default function Exports({
             ['depenses', 'Dépenses', depenses.length],
             ['frais', 'Frais de création', frais.length],
             ['deplacements', 'Déplacements', deplacements.length],
+            ['abonnements', 'Abonnements', abonnements.length],
           ] as [Jeu, string, number][]).map(([k, l, n]) => (
             <button
               key={k}
@@ -281,7 +327,13 @@ export default function Exports({
           <label><span>Statut</span>
             <select value={statut} onChange={(e) => setStatut(e.target.value)}>
               <option value="">Tous</option>
-              {jeu === 'frais' ? (
+              {jeu === 'abonnements' ? (
+                <>
+                  <option value="actif">Actif</option>
+                  <option value="gratuit">Gratuit</option>
+                  <option value="resilie">Résilié</option>
+                </>
+              ) : jeu === 'frais' ? (
                 <>
                   <option value="a_valider">À ratifier</option>
                   <option value="repris">Repris</option>
@@ -296,7 +348,7 @@ export default function Exports({
               )}
             </select></label>
 
-          {jeu !== 'deplacements' && (
+          {(jeu === 'depenses' || jeu === 'frais') && (
             <label><span>{jeu === 'frais' ? 'Avancé par' : 'Payé par'}</span>
               <select value={payePar} onChange={(e) => setPayePar(e.target.value)}>
                 <option value="">Tous</option>
@@ -322,7 +374,10 @@ export default function Exports({
           ) : (
             <>
               <div><span>Total HT</span><strong className="amount">{money(totaux.ht ?? 0)}</strong></div>
-              <div><span>TVA déductible</span><strong className="amount">{money(totaux.tva ?? 0)}</strong></div>
+              <div>
+                <span>{jeu === 'abonnements' ? 'TVA facturée' : 'TVA déductible'}</span>
+                <strong className="amount">{money(totaux.tva ?? 0)}</strong>
+              </div>
               <div><span>Total TTC</span><strong className="amount">{money(totaux.ttc ?? 0)}</strong></div>
             </>
           )}

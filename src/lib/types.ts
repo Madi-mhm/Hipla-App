@@ -42,6 +42,10 @@ export type Depense = {
   revu_par?: string | null;
   annule_le?: string | null;
   motif_annulation?: string | null;
+  numero_facture_fournisseur?: string | null;
+  siret_fournisseur?: string | null;
+  extrait_par_ia?: boolean;
+  confiance_extraction?: number | null;
   categories?: Categorie;
   profils?: { nom_complet: string };
 };
