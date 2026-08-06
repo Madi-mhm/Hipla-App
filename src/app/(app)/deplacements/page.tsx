@@ -126,6 +126,7 @@ function Tableau({ lignes, peutValider }: { lignes: Deplacement[]; peutValider: 
       <table style={{ minWidth: 620, fontSize: 'var(--fs-sm)' }}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--g-300)' }}>
+            <th style={th}>Pièce</th>
             <th style={th}>Date</th>
             <th style={th}>Trajet</th>
             <th style={th} className="col-secondaire">Motif</th>
@@ -137,6 +138,11 @@ function Tableau({ lignes, peutValider }: { lignes: Deplacement[]; peutValider: 
         <tbody>
           {lignes.map((d) => (
             <tr key={d.id} style={{ borderBottom: '1px solid var(--g-200)' }}>
+              <td style={td} className="mono">
+                <span style={{ fontSize: '.72rem', color: 'var(--g-600)' }}>
+                  {d.numero_piece ?? '—'}
+                </span>
+              </td>
               <td style={td}>{date(d.date_trajet)}</td>
               <td style={{ ...td, fontWeight: 500 }}>
                 {d.depart} → {d.arrivee}
@@ -151,7 +157,8 @@ function Tableau({ lignes, peutValider }: { lignes: Deplacement[]; peutValider: 
               </td>
               {peutValider && (
                 <td style={{ ...td, textAlign: 'right' }}>
-                  <ActionsValidation table="deplacements" id={d.id} />
+                  <ActionsValidation table="deplacements" id={d.id}
+                    resume={`${d.numero_piece ?? ''} · ${d.depart} → ${d.arrivee} · ${Number(d.kilometres) * (d.aller_retour ? 2 : 1)} km`} />
                 </td>
               )}
             </tr>

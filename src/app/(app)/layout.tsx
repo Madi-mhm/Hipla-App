@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import BarreProgression from '@/components/BarreProgression';
 import { profilCourant } from '@/lib/auth';
 
 /**
@@ -18,6 +19,7 @@ export default async function LayoutApplication({
 
   return (
     <div className="shell">
+      <BarreProgression />
       <Sidebar role={profil.role} />
       <div className="main">{children}</div>
     </div>

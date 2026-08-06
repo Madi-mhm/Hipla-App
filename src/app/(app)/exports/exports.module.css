@@ -1,0 +1,61 @@
+.onglets { display: flex; gap: .5rem; flex-wrap: wrap; }
+
+.onglet,
+.ongletActif {
+  display: inline-flex; align-items: center; gap: .5rem;
+  padding: .55rem 1rem;
+  border: 1px solid var(--g-300);
+  border-radius: var(--radius);
+  background: var(--g-50);
+  font-family: var(--display); font-size: var(--fs-sm); font-weight: 600;
+  color: var(--g-600); cursor: pointer; min-height: 40px;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.onglet:hover { border-color: var(--gold); }
+.ongletActif { background: var(--navy); color: var(--bone); border-color: var(--navy); }
+
+.compte {
+  font-family: var(--mono); font-size: .68rem;
+  background: rgba(0, 0, 0, .08); padding: 0 .35rem; border-radius: 3px;
+}
+.ongletActif .compte { background: rgba(245, 243, 239, .16); }
+
+.filtres {
+  display: grid; gap: .8rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr));
+}
+.filtres label { display: flex; flex-direction: column; gap: .28rem; }
+.filtres span {
+  font-family: var(--display); font-size: .66rem; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--g-500);
+}
+.filtres input,
+.filtres select {
+  padding: .55rem .65rem;
+  border: 1px solid var(--g-300);
+  border-radius: var(--radius);
+  background: var(--g-50);
+  font-size: var(--fs-sm);
+  min-height: 40px; width: 100%;
+}
+@media (max-width: 768px) {
+  .filtres input, .filtres select { font-size: 16px; }
+}
+
+.totaux {
+  display: grid; gap: .8rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+}
+.totaux > div {
+  background: var(--g-50); border: 1px solid var(--g-200);
+  border-radius: var(--radius); padding: .7rem .85rem;
+}
+.totaux span {
+  display: block; font-family: var(--display); font-size: .64rem;
+  font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--g-500);
+}
+.totaux strong {
+  display: block; font-family: var(--display); font-size: 1.15rem;
+  font-weight: 600; color: var(--navy); margin-top: .2rem;
+}

@@ -97,6 +97,7 @@ function Tableau({ depenses, peutValider }: { depenses: Depense[]; peutValider: 
       <table style={{ minWidth: 640, fontSize: 'var(--fs-sm)' }}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--g-300)' }}>
+            <th style={th}>Pièce</th>
             <th style={th}>Date</th>
             <th style={th}>Fournisseur</th>
             <th style={{ ...th }} className="col-secondaire">Catégorie</th>
@@ -111,6 +112,11 @@ function Tableau({ depenses, peutValider }: { depenses: Depense[]; peutValider: 
         <tbody>
           {depenses.map((d) => (
             <tr key={d.id} style={{ borderBottom: '1px solid var(--g-200)' }}>
+              <td style={td} className="mono">
+                <span style={{ fontSize: '.72rem', color: 'var(--g-600)' }}>
+                  {d.numero_piece ?? '—'}
+                </span>
+              </td>
               <td style={td}>{date(d.date_depense)}</td>
               <td style={{ ...td, fontWeight: 500 }}>
                 <Link href={`/depenses/${d.id}`} style={{ color: 'var(--navy)', textDecoration: 'none' }}>
@@ -143,7 +149,8 @@ function Tableau({ depenses, peutValider }: { depenses: Depense[]; peutValider: 
               </td>
               {peutValider && (
                 <td style={{ ...td, textAlign: 'right' }}>
-                  <ActionsValidation table="depenses" id={d.id} />
+                  <ActionsValidation table="depenses" id={d.id}
+                    resume={`${d.numero_piece ?? ''} · ${d.fournisseur} — ${Number(d.montant_ttc).toFixed(2).replace('.', ',')} € TTC`} />
                 </td>
               )}
             </tr>

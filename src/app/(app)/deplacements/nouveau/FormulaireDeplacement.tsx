@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { Vehicule } from '@/lib/types';
+import { detailsCreation } from '@/lib/audit';
 import styles from '../../depenses/nouvelle/formulaire.module.css';
 
 export default function FormulaireDeplacement({
@@ -50,13 +51,28 @@ export default function FormulaireDeplacement({
       cree_par: user.id,
       valide_par: peutValider ? user.id : null,
       valide_le: peutValider ? new Date().toISOString() : null,
-    }).select('id').single();
+    }).select('id, numero_piece').single();
 
     if (error) { setErreur(`Enregistrement impossible : ${error.message}`); setEnCours(false); return; }
 
+    const vehicule = vehicules.find((v) => v.id === vehiculeId);
     await supabase.rpc('journaliser', {
       p_action: 'creation', p_table: 'deplacements', p_id: data?.id ?? null,
-      p_details: { trajet: `${depart} → ${arrivee}`, km: kmTotal },
+      p_details: detailsCreation(
+        {
+          date_trajet: dateTrajet,
+          vehicule: vehicule?.libelle ?? null,
+          depart: depart.trim(),
+          arrivee: arrivee.trim(),
+          motif: motif.trim(),
+          kilometres: km,
+          aller_retour: allerRetour,
+          numero_piece: data?.numero_piece ?? null,
+          km_comptes: kmTotal,
+          statut: peutValider ? 'validee' : 'en_attente',
+        },
+        `${data?.numero_piece ?? ''} · ${depart.trim()} → ${arrivee.trim()} · ${kmTotal} km`
+      ),
     });
 
     router.push('/deplacements');

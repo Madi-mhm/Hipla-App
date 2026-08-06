@@ -1,0 +1,57 @@
+.champRecherche {
+  display: flex; align-items: center; gap: .6rem;
+  border: 1px solid var(--g-300);
+  border-radius: var(--radius);
+  background: var(--g-50);
+  padding: 0 .8rem;
+  min-height: 48px;
+}
+.champRecherche:focus-within { border-color: var(--gold); background: var(--g-0); }
+
+.champRecherche svg {
+  width: 18px; height: 18px; flex-shrink: 0;
+  fill: none; stroke: var(--g-400); stroke-width: 2; stroke-linecap: round;
+}
+
+.champRecherche input {
+  flex: 1; border: none; background: none; outline: none;
+  font-size: var(--fs-base); padding: .7rem 0; min-width: 0;
+}
+@media (max-width: 768px) { .champRecherche input { font-size: 16px; } }
+
+.champRecherche button {
+  background: none; border: none; cursor: pointer;
+  font-size: 1.3rem; color: var(--g-400); line-height: 1; padding: 0 .2rem;
+}
+.champRecherche button:hover { color: var(--g-700); }
+
+.filtres {
+  display: grid; gap: .7rem; margin-top: .9rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr));
+}
+.filtres label { display: flex; flex-direction: column; gap: .25rem; }
+.filtres span {
+  font-family: var(--display); font-size: .64rem; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--g-500);
+}
+.filtres input, .filtres select {
+  padding: .5rem .6rem; border: 1px solid var(--g-300);
+  border-radius: var(--radius); background: var(--g-50);
+  font-size: var(--fs-sm); min-height: 38px; width: 100%;
+}
+@media (max-width: 768px) { .filtres input, .filtres select { font-size: 16px; } }
+
+.resume {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 1rem; flex-wrap: wrap;
+  margin-top: .9rem; padding-top: .8rem;
+  border-top: 1px solid var(--g-200);
+  font-size: var(--fs-sm); color: var(--g-600);
+}
+
+.surligne {
+  background: var(--gold-soft);
+  color: var(--navy-deep);
+  border-radius: 2px;
+  padding: 0 1px;
+}

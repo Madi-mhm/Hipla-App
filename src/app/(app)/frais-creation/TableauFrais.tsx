@@ -22,6 +22,7 @@ import {
   CLASSE_STATUT_REPRISE, LIBELLE_ASSOCIE,
   type Categorie, type FraisCreation,
 } from '@/lib/types';
+import { detailsModification } from '@/lib/audit';
 import styles from './frais.module.css';
 
 type Props = {
@@ -77,7 +78,16 @@ export default function TableauFrais({ frais, categories, peutModifier }: Props)
 
     await supabase.rpc('journaliser', {
       p_action: 'ratification', p_table: 'frais_creation', p_id: null,
-      p_details: { lignes: aRatifier.length, total: totaux.totalTTC },
+      p_details: {
+        resume: `${aRatifier.length} lignes ratifiées en assemblée générale`,
+        lignes: aRatifier.map((f) => ({
+          date: f.date_engagement,
+          fournisseur: f.fournisseur,
+          montant_ttc: Number(f.montant_ttc),
+          avance_par: f.associe_payeur,
+        })),
+        total_ttc: aRatifier.reduce((s, f) => s + Number(f.montant_ttc), 0),
+      },
     });
     setEnCours(false);
     router.refresh();
@@ -287,6 +297,7 @@ function Bloc({
         <table style={{ minWidth: 680, fontSize: 'var(--fs-sm)' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--g-300)' }}>
+              <th style={th}>Pièce</th>
               <th style={th}>Date</th>
               <th style={th}>Fournisseur</th>
               <th style={th} className="col-secondaire">Catégorie</th>
@@ -303,6 +314,11 @@ function Bloc({
                 <LigneEdition key={f.id} frais={f} categories={categories} fermer={() => setEdite(null)} />
               ) : (
                 <tr key={f.id} style={{ borderBottom: '1px solid var(--g-200)' }}>
+                  <td style={td} className="mono">
+                    <span style={{ fontSize: '.72rem', color: 'var(--g-600)' }}>
+                      {f.numero_piece ?? '—'}
+                    </span>
+                  </td>
                   <td style={td}>{date(f.date_engagement)}</td>
                   <td style={{ ...td, fontWeight: 500 }}>
                     {f.fournisseur}
@@ -348,7 +364,7 @@ function Bloc({
               )
             )}
             <tr style={{ borderTop: '2px solid var(--g-300)' }}>
-              <td style={td} colSpan={5}><strong>Total {titre.toLowerCase()}</strong></td>
+              <td style={td} colSpan={6}><strong>Total {titre.toLowerCase()}</strong></td>
               <td style={{ ...td, textAlign: 'right' }} className="amount"><strong>{money(total)}</strong></td>
               <td style={td} colSpan={peutModifier ? 2 : 1}></td>
             </tr>
@@ -398,7 +414,29 @@ function LigneEdition({
     if (!error) {
       await supabase.rpc('journaliser', {
         p_action: 'modification', p_table: 'frais_creation', p_id: frais.id,
-        p_details: { fournisseur, montant_ttc: m.ttc },
+        p_details: detailsModification(
+          {
+            date_engagement: frais.date_engagement,
+            fournisseur: frais.fournisseur,
+            libelle: frais.libelle,
+            montant_ht: Number(frais.montant_ht),
+            taux_tva: Number(frais.taux_tva),
+            montant_ttc: Number(frais.montant_ttc),
+            associe_payeur: frais.associe_payeur,
+            statut_reprise: frais.statut_reprise,
+          },
+          {
+            date_engagement: dateEng,
+            fournisseur: fournisseur.trim(),
+            libelle: libelle.trim() || null,
+            montant_ht: m.ht,
+            taux_tva: taux,
+            montant_ttc: m.ttc,
+            associe_payeur: payeur,
+            statut_reprise: statut,
+          },
+          frais.fournisseur
+        ),
       });
       fermer();
       router.refresh();

@@ -1,13 +1,18 @@
 /**
  * MOTEUR DU CENTRE D'ACTION
  *
- * Chaque règle produit des actions. Une action disparaît quand la condition
- * qui l'a créée disparaît — jamais par un clic « vu ». C'est ce qui évite
- * qu'un centre d'action devienne une liste que l'on ignore.
+ * Les règles dépendent du rôle : un contributeur n'a pas à voir les
+ * échéances déclaratives, l'état des sauvegardes ou les frais à ratifier —
+ * ce ne sont pas ses responsabilités, et les afficher dilue les rares
+ * actions qui le concernent vraiment.
+ *
+ * Une action disparaît quand la condition qui l'a créée disparaît, jamais
+ * par un clic « vu ».
  */
 
 import { createClient } from '@/lib/supabase/server';
 import { daysUntil } from '@/lib/format';
+import type { Role } from '@/lib/permissions';
 
 export type Urgence = 'bloquant' | 'important' | 'a_faire' | 'info';
 
@@ -47,24 +52,145 @@ export const ECHEANCES = [
   { libelle: 'Liasse fiscale (2065)', date: '2027-12-31' },
 ];
 
-export async function construireActions(peutValider: boolean): Promise<Action[]> {
+export async function construireActions(
+  role: Role,
+  utilisateurId: string
+): Promise<Action[]> {
   const supabase = await createClient();
   const actions: Action[] = [];
 
-  const [depenses, deplacements, justificatifs, vehicules, frais] = await Promise.all([
-    supabase.from('depenses').select('id, statut, fournisseur, montant_ttc, date_depense'),
-    supabase.from('deplacements').select('id, statut, depart, arrivee'),
+  // Le propriétaire pilote l'entreprise ; le contributeur saisit ses
+  // dépenses. Deux centres d'action distincts, pas une version filtrée
+  // du même écran.
+  const pilote = role === 'proprietaire';
+
+  const [depenses, deplacements, justificatifs] = await Promise.all([
+    supabase.from('depenses')
+      .select('id, statut, fournisseur, montant_ttc, cree_par, motif_rejet'),
+    supabase.from('deplacements')
+      .select('id, statut, depart, arrivee, cree_par, motif_rejet'),
     supabase.from('justificatifs').select('depense_id'),
-    supabase.from('vehicules').select('id, libelle, date_ct').eq('actif', true),
-    supabase.from('frais_creation').select('id, statut_reprise, montant_ttc'),
   ]);
 
   const lignesDep = depenses.data ?? [];
   const lignesDepl = deplacements.data ?? [];
   const avecJustif = new Set((justificatifs.data ?? []).map((j) => j.depense_id));
 
+  // ================================================================
+  // RÈGLES COMMUNES À TOUS LES RÔLES
+  // ================================================================
+
+  // Saisies rejetées : celui qui les a créées doit les corriger.
+  const mesRejets = lignesDep.filter(
+    (d) => d.statut === 'rejetee' && d.cree_par === utilisateurId
+  );
+  if (mesRejets.length > 0) {
+    actions.push({
+      id: 'mes-depenses-rejetees',
+      urgence: 'important',
+      titre: `${mesRejets.length} dépense${mesRejets.length > 1 ? 's' : ''} rejetée${mesRejets.length > 1 ? 's' : ''}`,
+      detail: mesRejets[0].motif_rejet
+        ? `Motif : ${mesRejets[0].motif_rejet}`
+        : 'À corriger puis soumettre à nouveau.',
+      href: '/depenses',
+      libelleLien: 'Corriger',
+      compte: mesRejets.length,
+    });
+  }
+
+  const mesRejetsDepl = lignesDepl.filter(
+    (d) => d.statut === 'rejetee' && d.cree_par === utilisateurId
+  );
+  if (mesRejetsDepl.length > 0) {
+    actions.push({
+      id: 'mes-trajets-rejetes',
+      urgence: 'important',
+      titre: `${mesRejetsDepl.length} trajet${mesRejetsDepl.length > 1 ? 's' : ''} rejeté${mesRejetsDepl.length > 1 ? 's' : ''}`,
+      detail: 'À corriger puis soumettre à nouveau.',
+      href: '/deplacements',
+      libelleLien: 'Corriger',
+      compte: mesRejetsDepl.length,
+    });
+  }
+
+  // Mes saisies sans justificatif : à compléter avant validation.
+  const mesSansJustif = lignesDep.filter(
+    (d) => d.cree_par === utilisateurId && !avecJustif.has(d.id)
+  );
+  if (mesSansJustif.length > 0) {
+    actions.push({
+      id: 'mes-sans-justificatif',
+      urgence: 'a_faire',
+      titre: `${mesSansJustif.length} de vos dépenses sans justificatif`,
+      detail: "Sans pièce jointe, la charge n'est pas déductible.",
+      href: '/depenses',
+      libelleLien: 'Compléter',
+      compte: mesSansJustif.length,
+    });
+  }
+
+  // ================================================================
+  // RÈGLES RÉSERVÉES AU CONTRIBUTEUR
+  // ================================================================
+  if (!pilote) {
+    const mesEnAttente = lignesDep.filter(
+      (d) => d.statut === 'en_attente' && d.cree_par === utilisateurId
+    ).length + lignesDepl.filter(
+      (d) => d.statut === 'en_attente' && d.cree_par === utilisateurId
+    ).length;
+
+    if (mesEnAttente > 0) {
+      actions.push({
+        id: 'mes-saisies-en-attente',
+        urgence: 'info',
+        titre: `${mesEnAttente} saisie${mesEnAttente > 1 ? 's' : ''} en attente de validation`,
+        detail: 'Rien à faire de votre côté.',
+        href: '/depenses',
+        libelleLien: 'Voir',
+        compte: mesEnAttente,
+      });
+    }
+
+    return actions.sort((a, b) => ORDRE[a.urgence] - ORDRE[b.urgence]);
+  }
+
+  // ================================================================
+  // RÈGLES RÉSERVÉES AU PROPRIÉTAIRE
+  // ================================================================
+
+  const [vehicules, frais, sauvegardes] = await Promise.all([
+    supabase.from('vehicules').select('id, libelle, date_ct').eq('actif', true),
+    supabase.from('frais_creation').select('id, statut_reprise, montant_ttc'),
+    supabase.from('sauvegardes').select('demarree_le, statut')
+      .eq('statut', 'reussie').order('demarree_le', { ascending: false }).limit(1),
+  ]);
+
+  // ---- BLOQUANT : sauvegarde absente ou trop ancienne ----
+  const derniere = (sauvegardes.data ?? [])[0];
+  if (!derniere) {
+    actions.push({
+      id: 'aucune-sauvegarde',
+      urgence: 'bloquant',
+      titre: 'Aucune sauvegarde enregistrée',
+      detail: "Supabase n'en fournit aucune sur le palier gratuit.",
+      href: '/reglages/supervision',
+      libelleLien: 'Sauvegarder',
+    });
+  } else {
+    const jours = -daysUntil(derniere.demarree_le);
+    if (jours > 10) {
+      actions.push({
+        id: 'sauvegarde-ancienne',
+        urgence: 'bloquant',
+        titre: `Dernière sauvegarde il y a ${jours} jours`,
+        detail: 'La sauvegarde automatique semble avoir échoué.',
+        href: '/reglages/supervision',
+        libelleLien: 'Vérifier',
+      });
+    }
+  }
+
   // ---- BLOQUANT : dépense validée sans justificatif ----
-  // Sans pièce, la charge n'est pas déductible et la TVA pas récupérable.
   const sansJustif = lignesDep.filter(
     (d) => d.statut === 'validee' && !avecJustif.has(d.id)
   );
@@ -72,28 +198,11 @@ export async function construireActions(peutValider: boolean): Promise<Action[]>
     actions.push({
       id: 'sans-justificatif',
       urgence: 'bloquant',
-      titre: `${sansJustif.length} dépense${sansJustif.length > 1 ? 's' : ''} sans justificatif`,
+      titre: `${sansJustif.length} dépense${sansJustif.length > 1 ? 's' : ''} validée${sansJustif.length > 1 ? 's' : ''} sans justificatif`,
       detail: "Sans pièce, la charge n'est pas déductible et la TVA n'est pas récupérable.",
-      href: '/depenses?filtre=sans-justificatif',
+      href: '/depenses',
       libelleLien: 'Compléter',
       compte: sansJustif.length,
-    });
-  }
-
-  // ---- IMPORTANT : frais de création non ratifiés ----
-  // Sans ratification, ces dépenses restent personnelles : ni déductibles,
-  // ni récupérables en TVA.
-  const aRatifier = (frais.data ?? []).filter((f) => f.statut_reprise === 'a_valider');
-  if (aRatifier.length > 0) {
-    const total = aRatifier.reduce((s, f) => s + Number(f.montant_ttc), 0);
-    actions.push({
-      id: 'frais-a-ratifier',
-      urgence: 'important',
-      titre: `${aRatifier.length} frais de création à ratifier`,
-      detail: `${total.toFixed(2).replace('.', ',')} € engagés avant l'immatriculation. Sans ratification en AG, ces dépenses restent personnelles.`,
-      href: '/frais-creation',
-      libelleLien: 'Traiter',
-      compte: aRatifier.length,
     });
   }
 
@@ -112,35 +221,48 @@ export async function construireActions(peutValider: boolean): Promise<Action[]>
     }
   }
 
-  // ---- IMPORTANT : saisies en attente de validation ----
-  if (peutValider) {
-    const depAttente = lignesDep.filter((d) => d.statut === 'en_attente');
-    if (depAttente.length > 0) {
-      actions.push({
-        id: 'depenses-attente',
-        urgence: 'important',
-        titre: `${depAttente.length} dépense${depAttente.length > 1 ? 's' : ''} à valider`,
-        detail: depAttente.slice(0, 3).map((d) => d.fournisseur).join(', ')
-          + (depAttente.length > 3 ? '…' : ''),
-        href: '/depenses',
-        libelleLien: 'Valider',
-        compte: depAttente.length,
-      });
-    }
+  // ---- IMPORTANT : saisies à valider ----
+  const depAttente = lignesDep.filter((d) => d.statut === 'en_attente');
+  if (depAttente.length > 0) {
+    actions.push({
+      id: 'depenses-attente',
+      urgence: 'important',
+      titre: `${depAttente.length} dépense${depAttente.length > 1 ? 's' : ''} à valider`,
+      detail: depAttente.slice(0, 3).map((d) => d.fournisseur).join(', ')
+        + (depAttente.length > 3 ? '…' : ''),
+      href: '/depenses',
+      libelleLien: 'Valider',
+      compte: depAttente.length,
+    });
+  }
 
-    const deplAttente = lignesDepl.filter((d) => d.statut === 'en_attente');
-    if (deplAttente.length > 0) {
-      actions.push({
-        id: 'deplacements-attente',
-        urgence: 'important',
-        titre: `${deplAttente.length} trajet${deplAttente.length > 1 ? 's' : ''} à valider`,
-        detail: deplAttente.slice(0, 3).map((d) => `${d.depart} → ${d.arrivee}`).join(', ')
-          + (deplAttente.length > 3 ? '…' : ''),
-        href: '/deplacements',
-        libelleLien: 'Valider',
-        compte: deplAttente.length,
-      });
-    }
+  const deplAttente = lignesDepl.filter((d) => d.statut === 'en_attente');
+  if (deplAttente.length > 0) {
+    actions.push({
+      id: 'deplacements-attente',
+      urgence: 'important',
+      titre: `${deplAttente.length} trajet${deplAttente.length > 1 ? 's' : ''} à valider`,
+      detail: deplAttente.slice(0, 3).map((d) => `${d.depart} → ${d.arrivee}`).join(', ')
+        + (deplAttente.length > 3 ? '…' : ''),
+      href: '/deplacements',
+      libelleLien: 'Valider',
+      compte: deplAttente.length,
+    });
+  }
+
+  // ---- IMPORTANT : frais de création non ratifiés ----
+  const aRatifier = (frais.data ?? []).filter((f) => f.statut_reprise === 'a_valider');
+  if (aRatifier.length > 0) {
+    const total = aRatifier.reduce((s, f) => s + Number(f.montant_ttc), 0);
+    actions.push({
+      id: 'frais-a-ratifier',
+      urgence: 'important',
+      titre: `${aRatifier.length} frais de création à ratifier`,
+      detail: `${total.toFixed(2).replace('.', ',')} € engagés avant l'immatriculation. Sans ratification en AG, ces dépenses restent personnelles.`,
+      href: '/frais-creation',
+      libelleLien: 'Traiter',
+      compte: aRatifier.length,
+    });
   }
 
   // ---- IMPORTANT : échéance à moins de 30 jours ----
@@ -158,20 +280,11 @@ export async function construireActions(peutValider: boolean): Promise<Action[]>
     }
   }
 
-  // ---- À FAIRE : contrôle technique à moins de 60 jours ----
+  // ---- Contrôle technique des véhicules ----
   for (const v of vehicules.data ?? []) {
     if (!v.date_ct) continue;
     const j = daysUntil(v.date_ct);
-    if (j >= 0 && j <= 60) {
-      actions.push({
-        id: `ct-${v.id}`,
-        urgence: j <= 15 ? 'important' : 'a_faire',
-        titre: `Contrôle technique — ${v.libelle}`,
-        detail: `À passer dans ${j} jours.`,
-        href: '/reglages/vehicules',
-        libelleLien: 'Voir',
-      });
-    } else if (j < 0) {
+    if (j < 0) {
       actions.push({
         id: `ct-${v.id}`,
         urgence: 'bloquant',
@@ -180,21 +293,16 @@ export async function construireActions(peutValider: boolean): Promise<Action[]>
         href: '/reglages/vehicules',
         libelleLien: 'Voir',
       });
+    } else if (j <= 60) {
+      actions.push({
+        id: `ct-${v.id}`,
+        urgence: j <= 15 ? 'important' : 'a_faire',
+        titre: `Contrôle technique — ${v.libelle}`,
+        detail: `À passer dans ${j} jours.`,
+        href: '/reglages/vehicules',
+        libelleLien: 'Voir',
+      });
     }
-  }
-
-  // ---- À FAIRE : rejets à corriger, pour le contributeur ----
-  const rejetees = lignesDep.filter((d) => d.statut === 'rejetee');
-  if (!peutValider && rejetees.length > 0) {
-    actions.push({
-      id: 'depenses-rejetees',
-      urgence: 'a_faire',
-      titre: `${rejetees.length} dépense${rejetees.length > 1 ? 's' : ''} rejetée${rejetees.length > 1 ? 's' : ''}`,
-      detail: 'À corriger et soumettre à nouveau.',
-      href: '/depenses',
-      libelleLien: 'Corriger',
-      compte: rejetees.length,
-    });
   }
 
   // ---- INFO : échéance suivante ----

@@ -1,0 +1,14 @@
+.piste {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.barre {
+  height: 100%;
+  background: var(--gold);
+  box-shadow: 0 0 8px rgba(192, 135, 48, .6);
+  transition: width .18s ease-out;
+}

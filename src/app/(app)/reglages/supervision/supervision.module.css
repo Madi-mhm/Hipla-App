@@ -1,0 +1,73 @@
+.quotas { display: grid; gap: 1.1rem; }
+
+.quota { display: flex; flex-direction: column; gap: .4rem; }
+
+.quotaEntete {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 1rem; flex-wrap: wrap;
+}
+.quotaLibelle {
+  font-family: var(--display); font-size: var(--fs-sm); font-weight: 600;
+  color: var(--navy);
+}
+.quotaDetail { font-size: var(--fs-xs); color: var(--g-500); }
+
+.barre {
+  height: 6px; background: var(--g-200);
+  border-radius: 999px; overflow: hidden;
+}
+.barreRemplie { height: 100%; border-radius: 999px; transition: width .4s ease; }
+
+.derniere {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 1rem; flex-wrap: wrap;
+}
+
+.alerte {
+  font-size: var(--fs-sm); color: var(--danger); background: var(--danger-bg);
+  padding: .65rem .85rem; border-radius: var(--radius); margin-top: .8rem;
+  line-height: 1.5;
+}
+.succes {
+  font-size: var(--fs-sm); color: var(--success); background: var(--success-bg);
+  padding: .65rem .85rem; border-radius: var(--radius); margin-top: .8rem;
+}
+
+.compteurs {
+  display: grid; gap: .8rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+}
+
+.compteur {
+  display: block; text-decoration: none;
+  background: var(--g-50); border: 1px solid var(--g-200);
+  border-radius: var(--radius); padding: .85rem .95rem;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.compteur:hover { border-color: var(--gold); background: var(--g-0); }
+.compteurInactif { opacity: .45; cursor: default; }
+.compteurInactif:hover { border-color: var(--g-200); background: var(--g-50); }
+
+.compteurLibelle {
+  font-family: var(--display); font-size: .66rem; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--g-500);
+}
+.compteurValeur {
+  font-family: var(--display); font-size: 1.5rem; font-weight: 600;
+  color: var(--navy); line-height: 1.15; margin-top: .2rem;
+}
+.compteurDetail { font-size: var(--fs-xs); color: var(--g-500); margin-top: .15rem; }
+
+.rapport {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  background: var(--g-50);
+  border: 1px solid var(--g-200);
+  border-radius: var(--radius);
+  padding: .8rem 1rem;
+  margin-top: .8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--g-700);
+}

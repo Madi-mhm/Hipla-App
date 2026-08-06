@@ -12,9 +12,11 @@ import { createClient } from '@/lib/supabase/client';
 export default function ActionsValidation({
   table,
   id,
+  resume,
 }: {
   table: 'depenses' | 'deplacements';
   id: string;
+  resume?: string;
 }) {
   const router = useRouter();
   const [enCours, setEnCours] = useState(false);
@@ -54,7 +56,7 @@ export default function ActionsValidation({
       p_action: statut === 'validee' ? 'validation' : 'rejet',
       p_table: table,
       p_id: id,
-      p_details: motif ? { motif } : null,
+      p_details: { resume: resume ?? null, ...(motif ? { motif } : {}) },
     });
 
     router.refresh();

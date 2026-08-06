@@ -17,6 +17,7 @@ export type Categorie = {
 
 export type Depense = {
   id: string;
+  numero_piece: string | null;
   date_depense: string;
   fournisseur: string;
   libelle: string | null;
@@ -56,6 +57,7 @@ export type Vehicule = {
 
 export type Deplacement = {
   id: string;
+  numero_piece: string | null;
   date_trajet: string;
   vehicule_id: string;
   depart: string;
@@ -84,6 +86,7 @@ export const CLASSE_STATUT: Record<string, string> = {
 
 export type FraisCreation = {
   id: string;
+  numero_piece: string | null;
   date_engagement: string;
   fournisseur: string;
   libelle: string | null;

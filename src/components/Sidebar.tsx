@@ -12,15 +12,16 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { peut, type Module, type Role } from '@/lib/permissions';
+import { peut, type Action, type Module, type Role } from '@/lib/permissions';
 import styles from './Sidebar.module.css';
 
 type Entree = {
   libelle: string;
   href: string;
-  disponible: boolean;
+  disponible: boolean;   // false = ronde non encore construite
   ronde?: number;
-  module?: Module;
+  module?: Module;       // absent = visible par tout utilisateur connecté
+  action?: Action;       // permission requise, « read » par défaut
 };
 
 type Groupe = { titre: string; entrees: Entree[] };
@@ -30,6 +31,7 @@ const NAVIGATION: Groupe[] = [
     titre: 'Pilotage',
     entrees: [
       { libelle: "Centre d'action", href: '/', disponible: true },
+      { libelle: 'Recherche', href: '/recherche', disponible: true, module: 'depenses' },
       { libelle: 'Tableau de bord', href: '/tableau-de-bord', disponible: false, ronde: 11 },
     ],
   },
@@ -53,7 +55,7 @@ const NAVIGATION: Groupe[] = [
     entrees: [
       { libelle: 'Coffre', href: '/documents', disponible: false, ronde: 2, module: 'documents' },
       { libelle: 'Rapports mensuels', href: '/rapports', disponible: false, ronde: 12, module: 'documents' },
-      { libelle: 'Exports', href: '/exports', disponible: false, ronde: 13, module: 'exports' },
+      { libelle: 'Exports', href: '/exports', disponible: true, module: 'exports' },
     ],
   },
   {
@@ -63,7 +65,8 @@ const NAVIGATION: Groupe[] = [
       { libelle: 'Catégories', href: '/reglages/categories', disponible: true, module: 'depenses' },
       { libelle: 'Véhicules', href: '/reglages/vehicules', disponible: true, module: 'depenses' },
       { libelle: 'Utilisateurs', href: '/reglages/utilisateurs', disponible: true, module: 'utilisateurs' },
-      { libelle: 'Sauvegardes', href: '/reglages/sauvegardes', disponible: false, ronde: 4, module: 'entreprise' },
+      { libelle: "Journal d'audit", href: '/reglages/audit', disponible: true, module: 'audit' },
+      { libelle: 'Supervision', href: '/reglages/supervision', disponible: true, module: 'entreprise', action: 'update' },
     ],
   },
 ];
@@ -87,12 +90,21 @@ export default function Sidebar({ role }: { role: Role }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const groupes = NAVIGATION
-    .map((g) => ({
-      ...g,
-      entrees: g.entrees.filter((e) => !e.module || peut(role, e.module, 'read')),
-    }))
-    .filter((g) => g.entrees.length > 0);
+  // Trois états possibles, plutôt que masquer ce qui est interdit :
+  //   ouvert      → accessible
+  //   verrouille  → existe, mais le rôle n'y a pas droit
+  //   a_venir     → pas encore construit
+  // Afficher le verrou évite qu'un utilisateur croie l'application
+  // incomplète ou différente selon la personne connectée.
+  const groupes = NAVIGATION.map((g) => ({
+    ...g,
+    entrees: g.entrees.map((e) => {
+      const autorise = !e.module || peut(role, e.module, e.action ?? 'read');
+      const etat: 'ouvert' | 'verrouille' | 'a_venir' =
+        !autorise ? 'verrouille' : e.disponible ? 'ouvert' : 'a_venir';
+      return { ...e, etat };
+    }),
+  }));
 
   return (
     <>
@@ -124,20 +136,39 @@ export default function Sidebar({ role }: { role: Role }) {
             <div key={groupe.titre} className={styles.groupe}>
               <p className={styles.groupeTitre}>{groupe.titre}</p>
               <ul>
-                {groupe.entrees.map((e) =>
-                  e.disponible ? (
-                    <li key={e.href}>
-                      <Link
-                        href={e.href}
-                        className={
-                          chemin === e.href ? `${styles.lien} ${styles.lienActif}` : styles.lien
-                        }
-                        aria-current={chemin === e.href ? 'page' : undefined}
-                      >
-                        {e.libelle}
-                      </Link>
-                    </li>
-                  ) : (
+                {groupe.entrees.map((e) => {
+                  if (e.etat === 'ouvert') {
+                    return (
+                      <li key={e.href}>
+                        <Link
+                          href={e.href}
+                          className={
+                            chemin === e.href ? `${styles.lien} ${styles.lienActif}` : styles.lien
+                          }
+                          aria-current={chemin === e.href ? 'page' : undefined}
+                        >
+                          {e.libelle}
+                        </Link>
+                      </li>
+                    );
+                  }
+                  if (e.etat === 'verrouille') {
+                    return (
+                      <li key={e.href}>
+                        <span
+                          className={`${styles.lien} ${styles.lienVerrouille}`}
+                          title="Votre rôle ne donne pas accès à cette section"
+                        >
+                          {e.libelle}
+                          <svg className={styles.cadenas} viewBox="0 0 24 24" aria-hidden="true">
+                            <rect x="5" y="11" width="14" height="10" rx="2" />
+                            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                          </svg>
+                        </span>
+                      </li>
+                    );
+                  }
+                  return (
                     <li key={e.href}>
                       <span
                         className={`${styles.lien} ${styles.lienInactif}`}
@@ -147,8 +178,8 @@ export default function Sidebar({ role }: { role: Role }) {
                         <span className={styles.ronde}>R{e.ronde}</span>
                       </span>
                     </li>
-                  )
-                )}
+                  );
+                })}
               </ul>
             </div>
           ))}

@@ -47,7 +47,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   return (
     <>
-      <Header titre={depense.fournisseur} sousTitre="Détail de la dépense" />
+      <Header
+        titre={depense.fournisseur}
+        sousTitre={depense.numero_piece ? `Pièce ${depense.numero_piece}` : 'Détail de la dépense'}
+      />
       <div className="content">
         <DetailDepense
           depense={depense as Depense}

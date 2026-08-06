@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import Header from '@/components/Header';
 import { profilCourant } from '@/lib/auth';
-import { peut } from '@/lib/permissions';
 import { createClient } from '@/lib/supabase/server';
 import { money, dateLong, daysUntil } from '@/lib/format';
 import {
@@ -15,8 +14,8 @@ export default async function Page() {
   const profil = await profilCourant();
   if (!profil) redirect('/connexion');
 
-  const peutValider = peut(profil.role, 'depenses', 'validate');
-  const actions = await construireActions(peutValider);
+  const pilote = profil.role === 'proprietaire';
+  const actions = await construireActions(profil.role, profil.id);
 
   const supabase = await createClient();
   const { data: dep } = await supabase
@@ -92,6 +91,7 @@ export default async function Page() {
           )}
         </section>
 
+        {pilote && (
         <div className="grid-cards" style={{ marginBottom: '1.5rem' }}>
           <div className="card">
             <p className="card__title">Charges validées (HT)</p>
@@ -115,7 +115,9 @@ export default async function Page() {
             </p>
           </div>
         </div>
+        )}
 
+        {pilote && (
         <div className="card">
           <p className="card__title">Échéances de l'exercice</p>
           <div className="table-scroll">
@@ -140,6 +142,26 @@ export default async function Page() {
             </table>
           </div>
         </div>
+        )}
+
+        {!pilote && (
+          <div className="card">
+            <p className="card__title">Vos accès</p>
+            <p style={{ fontSize: 'var(--fs-sm)', lineHeight: 1.6, maxWidth: '60ch' }}>
+              Vous pouvez consulter l'ensemble des données comptables et saisir
+              vos dépenses et déplacements. Vos saisies sont soumises à
+              validation avant d'entrer en comptabilité.
+            </p>
+            <div style={{ display: 'flex', gap: '.6rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+              <Link href="/depenses/nouvelle" className="btn btn--gold">
+                + Nouvelle dépense
+              </Link>
+              <Link href="/deplacements/nouveau" className="btn btn--ghost">
+                + Nouveau trajet
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

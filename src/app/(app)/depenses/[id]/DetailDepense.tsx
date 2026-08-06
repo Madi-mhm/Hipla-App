@@ -17,6 +17,7 @@ import {
 } from '@/lib/comptabilite';
 import { money, date, dateLong } from '@/lib/format';
 import { LIBELLE_STATUT, CLASSE_STATUT, type Categorie, type Depense } from '@/lib/types';
+import { detailsModification, detailsSuppression } from '@/lib/audit';
 import styles from '../nouvelle/formulaire.module.css';
 
 type Fichier = {
@@ -106,9 +107,41 @@ export default function DetailDepense({
       });
     }
 
+    // Avant / après champ par champ : c'est ce qui rend une correction
+    // vérifiable, et au besoin réversible.
+    const avant = {
+      date_depense: depense.date_depense,
+      fournisseur: depense.fournisseur,
+      libelle: depense.libelle,
+      categorie: depense.categories?.libelle ?? null,
+      compte: depense.compte,
+      montant_ht: Number(depense.montant_ht),
+      taux_tva: Number(depense.taux_tva),
+      montant_tva: Number(depense.montant_tva),
+      montant_ttc: Number(depense.montant_ttc),
+      tva_deductible: Number(depense.tva_deductible),
+      notes: depense.notes,
+    };
+    const apres = {
+      date_depense: dateDepense,
+      fournisseur: fournisseur.trim(),
+      libelle: libelle.trim() || null,
+      categorie: categorie.libelle,
+      compte: categorie.compte,
+      montant_ht: montants.ht,
+      taux_tva: tauxTva,
+      montant_tva: montants.tva,
+      montant_ttc: montants.ttc,
+      tva_deductible: tvaRec,
+      notes: notes.trim() || null,
+    };
+
     await supabase.rpc('journaliser', {
       p_action: 'modification', p_table: 'depenses', p_id: depense.id,
-      p_details: { fournisseur, montant_ttc: montants.ttc },
+      p_details: detailsModification(
+        avant, apres,
+        `${depense.numero_piece ?? ''} · ${depense.fournisseur}`
+      ),
     });
 
     setEdition(false);
@@ -133,7 +166,12 @@ export default function DetailDepense({
     if (error) { setErreur(error.message); setEnCours(false); return; }
     await supabase.rpc('journaliser', {
       p_action: statut === 'validee' ? 'validation' : 'rejet',
-      p_table: 'depenses', p_id: depense.id, p_details: motif ? { motif } : null,
+      p_table: 'depenses', p_id: depense.id,
+      p_details: {
+        resume: `${depense.numero_piece ?? ''} · ${depense.fournisseur} — ${Number(depense.montant_ttc).toFixed(2).replace('.', ',')} € TTC`,
+        saisie_par: depense.profils?.nom_complet ?? null,
+        ...(motif ? { motif } : {}),
+      },
     });
     setEnCours(false);
     router.refresh();
@@ -143,9 +181,29 @@ export default function DetailDepense({
     if (!window.confirm('Supprimer définitivement cette dépense et ses justificatifs ?')) return;
     setEnCours(true);
     const supabase = createClient();
+    // L'enregistrement complet est conservé : c'est la seule trace qui
+    // subsistera de la ligne effacée.
     await supabase.rpc('journaliser', {
       p_action: 'suppression', p_table: 'depenses', p_id: depense.id,
-      p_details: { fournisseur: depense.fournisseur, montant_ttc: depense.montant_ttc },
+      p_details: detailsSuppression(
+        {
+          numero_piece: depense.numero_piece,
+          date_depense: depense.date_depense,
+          fournisseur: depense.fournisseur,
+          libelle: depense.libelle,
+          categorie: depense.categories?.libelle ?? null,
+          compte: depense.compte,
+          montant_ht: Number(depense.montant_ht),
+          taux_tva: Number(depense.taux_tva),
+          montant_tva: Number(depense.montant_tva),
+          montant_ttc: Number(depense.montant_ttc),
+          tva_deductible: Number(depense.tva_deductible),
+          statut: depense.statut,
+          notes: depense.notes,
+          justificatifs: fichiers.length,
+        },
+        `${depense.numero_piece ?? ''} · ${depense.fournisseur} — ${Number(depense.montant_ttc).toFixed(2).replace('.', ',')} € TTC`
+      ),
     });
     const { error } = await supabase.from('depenses').delete().eq('id', depense.id);
     if (error) { setErreur(error.message); setEnCours(false); return; }
@@ -302,6 +360,7 @@ export default function DetailDepense({
             <div className="table-scroll">
               <table style={{ minWidth: 380, fontSize: 'var(--fs-sm)' }}>
                 <tbody>
+                  <Ligne k="Numéro de pièce" v={depense.numero_piece ?? '—'} />
                   <Ligne k="Date" v={dateLong(depense.date_depense)} />
                   <Ligne k="Fournisseur" v={depense.fournisseur} />
                   {depense.libelle && <Ligne k="Description" v={depense.libelle} />}

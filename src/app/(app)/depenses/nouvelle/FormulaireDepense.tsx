@@ -20,6 +20,7 @@ import {
 } from '@/lib/comptabilite';
 import { money } from '@/lib/format';
 import type { Categorie } from '@/lib/types';
+import { detailsCreation } from '@/lib/audit';
 import styles from './formulaire.module.css';
 
 type Props = { categories: Categorie[]; peutValider: boolean };
@@ -131,7 +132,7 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
         valide_par: peutValider ? user.id : null,
         valide_le: peutValider ? new Date().toISOString() : null,
       })
-      .select('id')
+      .select('id, numero_piece')
       .single();
 
     if (error || !depense) {
@@ -159,7 +160,26 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
       p_action: 'creation',
       p_table: 'depenses',
       p_id: depense.id,
-      p_details: { fournisseur, montant_ttc: montants.ttc },
+      p_details: detailsCreation(
+        {
+          date_depense: dateDepense,
+          fournisseur: fournisseur.trim(),
+          libelle: libelle.trim() || null,
+          categorie: categorie.libelle,
+          compte: categorie.compte,
+          montant_ht: montants.ht,
+          taux_tva: tauxTva,
+          montant_tva: montants.tva,
+          montant_ttc: montants.ttc,
+          tva_deductible: tvaRec,
+          moyen_paiement: moyenPaiement,
+          paye_par: payePar,
+          numero_piece: depense.numero_piece,
+          statut: peutValider ? 'validee' : 'en_attente',
+          justificatifs: fichiers.length,
+        },
+        `${depense.numero_piece ?? ''} · ${fournisseur.trim()} — ${montants.ttc.toFixed(2).replace('.', ',')} € TTC`
+      ),
     });
 
     router.push('/depenses');

@@ -1,0 +1,29 @@
+.squelette { display: flex; flex-direction: column; gap: .75rem; }
+
+.ligne { display: flex; gap: 1rem; align-items: center; }
+
+.bloc {
+  height: 14px;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--g-100) 25%,
+    var(--g-200) 37%,
+    var(--g-100) 63%
+  );
+  background-size: 400% 100%;
+  animation: ondulation 1.4s ease infinite;
+}
+
+.blocTitre { width: 130px; height: 10px; margin-bottom: .7rem; }
+.blocValeur { width: 90px; height: 26px; }
+
+@keyframes ondulation {
+  0%   { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+/* Sans animation pour qui l'a demandé : un aplat suffit à signaler l'attente. */
+@media (prefers-reduced-motion: reduce) {
+  .bloc { animation: none; background: var(--g-150, var(--g-100)); }
+}
