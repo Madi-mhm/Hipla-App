@@ -34,7 +34,15 @@ export function versCSV<T>(lignes: T[], colonnes: Colonne<T>[]): string {
   return BOM + [entetes, ...corps].join('\r\n');
 }
 
-export function versJSON<T>(lignes: T[]): string {
+/**
+ * Sérialisation JSON.
+ *
+ * Le paramètre est volontairement `unknown[]` et non générique : l'appelant
+ * manipule une union de types de lignes, et un générique obligerait
+ * TypeScript à en choisir un seul. La fonction ne fait que sérialiser,
+ * elle n'a besoin d'aucune information sur la forme des données.
+ */
+export function versJSON(lignes: unknown[]): string {
   return JSON.stringify(lignes, null, 2);
 }
 
