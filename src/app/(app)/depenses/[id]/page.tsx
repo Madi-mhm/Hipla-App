@@ -5,8 +5,8 @@ import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import DetailDepense from './DetailDepense';
 import Commentaires from '@/components/Commentaires';
-import type { Commentaire } from '@/lib/types';
-import type { Categorie, Depense } from '@/lib/types';
+import Rapprochement from '@/components/Rapprochement';
+import type { Categorie, Depense, Commentaire, TransactionQonto } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +40,24 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         : Promise.resolve({ data: null }),
     ]);
 
+  // Opérations bancaires liées ou disponibles pour un rapprochement manuel.
+  const [{ data: proposee }, { data: confirmee }, { data: libres }] = await Promise.all([
+    depense.transaction_proposee_id
+      ? supabase.from('transactions_qonto').select('*')
+          .eq('id', depense.transaction_proposee_id).single()
+      : Promise.resolve({ data: null }),
+    depense.transaction_qonto_id
+      ? supabase.from('transactions_qonto').select('*')
+          .eq('id', depense.transaction_qonto_id).single()
+      : Promise.resolve({ data: null }),
+    supabase.from('transactions_qonto').select('*')
+      .eq('statut_traitement', 'a_traiter')
+      .eq('statut_qonto', 'completed')
+      .eq('sens', 'debit')
+      .order('date_operation', { ascending: false })
+      .limit(50),
+  ]);
+
   // Le bucket est privé : on génère des URL signées, valables une heure.
   const fichiers = await Promise.all(
     (justifs ?? []).map(async (j) => {
@@ -72,6 +90,18 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           peutRevue={peut(profil.role, 'depenses', 'revue')}
           nomRelecteur={relecteur?.nom_complet ?? null}
         />
+
+        <div style={{ marginTop: '1rem' }}>
+          <Rapprochement
+            depenseId={id}
+            statut={depense.statut_rapprochement ?? 'sans_transaction'}
+            rechercheAuto={depense.recherche_auto ?? true}
+            transactionProposee={(proposee ?? null) as TransactionQonto | null}
+            transactionConfirmee={(confirmee ?? null) as TransactionQonto | null}
+            transactionsLibres={(libres ?? []) as TransactionQonto[]}
+            peutGerer={peut(profil.role, 'banque', 'update')}
+          />
+        </div>
 
         <div style={{ marginTop: '1rem' }}>
           <Commentaires

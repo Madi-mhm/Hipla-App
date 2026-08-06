@@ -1,0 +1,55 @@
+.entete {
+  display: flex; justify-content: space-between;
+  align-items: baseline; gap: 1rem; flex-wrap: wrap;
+  margin-bottom: .8rem;
+}
+
+.confirme {
+  background: var(--success-bg);
+  border-radius: var(--radius);
+  padding: .8rem 1rem;
+  font-size: var(--fs-sm);
+}
+
+.proposition {
+  font-size: var(--fs-sm); color: var(--info);
+  background: var(--info-bg);
+  padding: .65rem .85rem; border-radius: var(--radius);
+  line-height: 1.5; margin-bottom: .9rem; max-width: 66ch;
+}
+
+.carteTransaction {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 1rem; flex-wrap: wrap;
+  border: 1px solid var(--g-300);
+  border-left: 3px solid var(--gold);
+  border-radius: var(--radius);
+  padding: .8rem 1rem;
+  background: var(--g-50);
+}
+
+.actions { display: flex; gap: .6rem; margin-top: 1rem; flex-wrap: wrap; }
+@media (max-width: 520px) {
+  .actions { flex-direction: column; }
+  .actions .btn { width: 100%; }
+}
+
+.selection {
+  display: grid; gap: .6rem; margin-top: 1rem;
+  grid-template-columns: 1fr auto; align-items: end;
+}
+.selection label { display: flex; flex-direction: column; gap: .28rem; }
+.selection span {
+  font-family: var(--display); font-size: .64rem; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--g-500);
+}
+.selection select {
+  padding: .55rem .7rem; border: 1px solid var(--g-300);
+  border-radius: var(--radius); background: var(--g-50);
+  font-size: var(--fs-sm); min-height: 42px; width: 100%;
+}
+@media (max-width: 620px) {
+  .selection { grid-template-columns: 1fr; }
+  .selection select { font-size: 16px; }
+  .selection .btn { width: 100%; }
+}

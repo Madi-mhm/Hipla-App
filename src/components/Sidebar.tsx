@@ -44,7 +44,7 @@ const NAVIGATION: Groupe[] = [
       { libelle: 'Déplacements', href: '/deplacements', disponible: true, module: 'depenses' },
       { libelle: 'Frais de création', href: '/frais-creation', disponible: true, module: 'depenses' },
       { libelle: 'Abonnements', href: '/abonnements', disponible: true, module: 'abonnements' },
-      { libelle: 'Banque', href: '/banque', disponible: false, ronde: 6, module: 'banque' },
+      { libelle: 'Banque', href: '/banque', disponible: true, module: 'banque' },
       { libelle: 'Ventes', href: '/ventes', disponible: false, ronde: 8, module: 'ventes' },
       { libelle: 'TVA', href: '/tva', disponible: false, ronde: 9, module: 'tva' },
       { libelle: 'Échéances', href: '/echeances', disponible: false, ronde: 10, module: 'echeances' },

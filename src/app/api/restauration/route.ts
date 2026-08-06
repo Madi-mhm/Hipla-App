@@ -29,6 +29,7 @@ const ORDRE = [
   'vehicules',
   'bareme_km',
   'fournisseurs_connus',
+  'libelles_bancaires',
   // Restauré avant les écritures : les numéros de pièce doivent
   // reprendre là où ils s'étaient arrêtés, sans réattribution.
   'compteurs_piece',
@@ -36,6 +37,7 @@ const ORDRE = [
   'frais_creation',
   'deplacements',
   'justificatifs',
+  'transactions_qonto',
   'abonnements',
   'abonnement_echeances',
   'commentaires',
@@ -53,6 +55,7 @@ const EXCLUES = new Set([
   'audit',                    // le journal d'une installation lui appartient
   'sauvegardes',              // historique propre à chaque installation
   'usage_ia',                 // consommation propre à chaque installation
+  'synchronisations',         // historique propre à chaque installation
 ]);
 
 function admin() {

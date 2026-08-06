@@ -46,6 +46,11 @@ export type Depense = {
   siret_fournisseur?: string | null;
   extrait_par_ia?: boolean;
   confiance_extraction?: number | null;
+  statut_rapprochement?: 'sans_transaction' | 'propose' | 'confirme' | 'sans_objet';
+  transaction_proposee_id?: string | null;
+  transaction_qonto_id?: string | null;
+  paye_le?: string | null;
+  recherche_auto?: boolean;
   categories?: Categorie;
   profils?: { nom_complet: string };
 };
@@ -317,3 +322,76 @@ export function coutAnnuel(montant: number, periodicite: string): number {
   if (periodicite === 'annuel') return montant;
   return montant * 12;
 }
+
+export type TransactionQonto = {
+  id: string;
+  qonto_id: string;
+  numero_piece: string | null;
+  date_operation: string;
+  date_valeur: string | null;
+  libelle: string;
+  contrepartie: string | null;
+  reference: string | null;
+  montant: number;
+  sens: 'debit' | 'credit';
+  devise: string;
+  statut_qonto: 'pending' | 'completed' | 'declined' | 'reversed';
+  categorie_qonto: string | null;
+  a_justificatif: boolean;
+  justificatif_recupere: boolean;
+  statut_traitement: 'a_traiter' | 'rattachee' | 'ecartee';
+  motif_ecart: string | null;
+  depense_id: string | null;
+  echeance_id: string | null;
+  rattachement_auto: boolean;
+  rattache_le: string | null;
+  synchronise_le: string;
+  depenses?: { numero_piece: string | null; fournisseur: string };
+};
+
+export type Synchronisation = {
+  id: string;
+  demarree_le: string;
+  terminee_le: string | null;
+  declencheur: string;
+  statut: string;
+  transactions_lues: number | null;
+  transactions_nouvelles: number | null;
+  rapprochees_auto: number | null;
+  solde_qonto: number | null;
+  duree_ms: number | null;
+  erreur: string | null;
+};
+
+export const LIBELLE_TRAITEMENT: Record<string, string> = {
+  a_traiter: 'À traiter',
+  rattachee: 'Rattachée',
+  ecartee: 'Écartée',
+};
+
+export const CLASSE_TRAITEMENT: Record<string, string> = {
+  a_traiter: 'badge--warning',
+  rattachee: 'badge--success',
+  ecartee: 'badge--neutral',
+};
+
+export const LIBELLE_STATUT_QONTO: Record<string, string> = {
+  completed: 'Consolidée',
+  pending: 'En attente',
+  declined: 'Refusée',
+  reversed: 'Annulée',
+};
+
+export const LIBELLE_RAPPROCHEMENT: Record<string, string> = {
+  sans_transaction: 'Sans opération bancaire',
+  propose: 'Rapprochement proposé',
+  confirme: 'Rapproché',
+  sans_objet: 'Sans objet',
+};
+
+export const CLASSE_RAPPROCHEMENT: Record<string, string> = {
+  sans_transaction: 'badge--warning',
+  propose: 'badge--info',
+  confirme: 'badge--success',
+  sans_objet: 'badge--neutral',
+};

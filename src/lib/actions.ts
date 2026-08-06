@@ -190,7 +190,8 @@ export async function construireActions(
   // RÈGLES RÉSERVÉES AU PROPRIÉTAIRE
   // ================================================================
 
-  const [vehicules, frais, sauvegardes, commentaires, echeancesAbo, abosEngages] = await Promise.all([
+  const [vehicules, frais, sauvegardes, commentaires, echeancesAbo, abosEngages,
+         transactionsATraiter, synchroQonto, rapprochementsProposes] = await Promise.all([
     supabase.from('vehicules').select('id, libelle, date_ct').eq('actif', true),
     supabase.from('frais_creation').select('id, statut_reprise, montant_ttc'),
     supabase.from('sauvegardes').select('demarree_le, statut')
@@ -203,7 +204,75 @@ export async function construireActions(
     supabase.from('abonnements')
       .select('id, nom, engagement_jusquau, preavis_jours')
       .eq('statut', 'actif').not('engagement_jusquau', 'is', null),
+    supabase.from('transactions_qonto')
+      .select('id, libelle, montant, date_operation')
+      .eq('statut_traitement', 'a_traiter')
+      .eq('statut_qonto', 'completed')
+      .eq('sens', 'debit'),
+    supabase.from('synchronisations')
+      .select('demarree_le')
+      .eq('statut', 'reussie')
+      .order('demarree_le', { ascending: false }).limit(1),
+    supabase.from('depenses')
+      .select('id, numero_piece, fournisseur, montant_ttc')
+      .eq('statut_rapprochement', 'propose'),
   ]);
+
+  // ---- IMPORTANT : rapprochements proposés ----
+  // Le montant vient de la banque, mais le lien entre l'opération et
+  // l'écriture reste une interprétation : il appelle une confirmation.
+  const aConfirmer = rapprochementsProposes.data ?? [];
+  if (aConfirmer.length > 0) {
+    actions.push({
+      id: 'rapprochements-proposes',
+      urgence: 'important',
+      titre: `${aConfirmer.length} rapprochement${aConfirmer.length > 1 ? 's' : ''} à confirmer`,
+      detail: aConfirmer.slice(0, 3).map((d) => d.fournisseur).join(', ')
+        + (aConfirmer.length > 3 ? '…' : ''),
+      href: '/depenses',
+      libelleLien: 'Confirmer',
+      compte: aConfirmer.length,
+    });
+  }
+
+  // ---- BLOQUANT : prélèvements sans écriture comptable ----
+  // C'est le contrôle qu'un vérificateur effectue en premier : une charge
+  // sortie du compte sans écriture n'est ni déductible ni récupérable.
+  const sansEcriture = transactionsATraiter.data ?? [];
+  if (sansEcriture.length > 0) {
+    const total = sansEcriture.reduce((s, t) => s + Number(t.montant), 0);
+    actions.push({
+      id: 'banque-a-traiter',
+      urgence: 'important',
+      titre: `${sansEcriture.length} prélèvement${sansEcriture.length > 1 ? 's' : ''} sans écriture`,
+      detail: `${total.toFixed(2).replace('.', ',')} € sortis du compte sans dépense enregistrée.`,
+      href: '/banque',
+      libelleLien: 'Traiter',
+      compte: sansEcriture.length,
+    });
+  }
+
+  // ---- Synchronisation interrompue ----
+  const derniereSynchro = (synchroQonto.data ?? [])[0];
+  if (!derniereSynchro) {
+    actions.push({
+      id: 'qonto-jamais',
+      urgence: 'a_faire',
+      titre: 'Compte bancaire jamais synchronisé',
+      detail: 'Les opérations Qonto ne sont pas encore rapprochées.',
+      href: '/banque',
+      libelleLien: 'Synchroniser',
+    });
+  } else if (-daysUntil(derniereSynchro.demarree_le) > 3) {
+    actions.push({
+      id: 'qonto-interrompue',
+      urgence: 'important',
+      titre: `Synchronisation bancaire interrompue depuis ${-daysUntil(derniereSynchro.demarree_le)} jours`,
+      detail: "La clé Qonto a peut-être expiré ou été révoquée.",
+      href: '/banque',
+      libelleLien: 'Vérifier',
+    });
+  }
 
   // ---- IMPORTANT : justificatifs d'abonnement manquants ----
   // Regroupés en une seule action : huit abonnements ne doivent pas

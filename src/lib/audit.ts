@@ -42,6 +42,16 @@ export const LIBELLE_CHAMP: Record<string, string> = {
   piece: 'Pièce concernée',
   reponse: 'Réponse apportée',
   format: 'Format',
+  sens: 'Sens',
+  contrepartie: 'Contrepartie',
+  statut_traitement: 'Traitement',
+  rattachement_auto: 'Rattachement automatique',
+  paye_le: 'Payé le',
+  transaction_qonto_id: 'Opération bancaire',
+  statut_rapprochement: 'Rapprochement',
+  transaction_proposee_id: 'Opération proposée',
+  recherche_auto: 'Recherche automatique',
+  motif_ecart: 'Motif de mise à l\'écart',
   lignes: 'Lignes',
   du: 'Du',
   au: 'Au',
@@ -104,6 +114,9 @@ export const LIBELLE_TABLE: Record<string, string> = {
   profils: 'Utilisateur',
   sauvegardes: 'Sauvegarde',
   usage_ia: 'Extraction IA',
+  transactions_qonto: 'Opération bancaire',
+  libelles_bancaires: 'Libellé bancaire',
+  synchronisations: 'Synchronisation',
 };
 
 export const CLASSE_ACTION: Record<string, string> = {

@@ -276,11 +276,25 @@ export default function Extraction({
       }, `${dep.numero_piece} · ${doc.fournisseur} — ${m.ttc.toFixed(2).replace('.', ',')} € TTC`),
     });
 
+    // Cherche une opération bancaire correspondante : si elle existe, le
+    // rapprochement est proposé sans attendre la synchronisation suivante.
+    const { data: corr } = await supabase.rpc('chercher_transaction', { p_depense: dep.id });
+    const trouve = (corr as { resultat?: string } | null)?.resultat;
+    if (trouve === 'correspondance_forte' || trouve === 'correspondance_probable') {
+      await supabase.rpc('proposer_rapprochement', {
+        p_depense: dep.id,
+        p_transaction: (corr as { transaction_id: string }).transaction_id,
+      });
+    }
+
     majDoc(doc.id, { etat: 'enregistre', numeroPiece: dep.numero_piece ?? undefined, erreur: undefined });
     setSucces(
-      statut === 'validee'
+      (statut === 'validee'
         ? `${dep.numero_piece} enregistrée et validée.`
-        : `${dep.numero_piece} enregistrée. Elle attend votre vérification.`
+        : `${dep.numero_piece} enregistrée. Elle attend votre vérification.`)
+      + (trouve && trouve.startsWith('correspondance')
+        ? ' Une opération bancaire correspondante a été trouvée : à confirmer.'
+        : '')
     );
     router.refresh();
   }

@@ -28,7 +28,8 @@ const TABLES = [
   'compteurs_piece',
   'depenses', 'justificatifs', 'deplacements', 'frais_creation',
   'abonnements', 'abonnement_echeances', 'commentaires', 'taches',
-  'usage_ia', 'sauvegardes', 'audit',
+  'transactions_qonto', 'libelles_bancaires',
+  'usage_ia', 'sauvegardes', 'synchronisations', 'audit',
 ] as const;
 
 /** Dumps hebdomadaires conservés, en semaines. Les dumps du 1er du mois sont gardés. */

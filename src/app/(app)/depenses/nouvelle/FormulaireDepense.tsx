@@ -188,6 +188,16 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
       ),
     });
 
+    // Recherche immédiate d'une opération bancaire correspondante.
+    const { data: corr } = await supabase.rpc('chercher_transaction', { p_depense: depense.id });
+    const trouve = (corr as { resultat?: string } | null)?.resultat;
+    if (trouve === 'correspondance_forte' || trouve === 'correspondance_probable') {
+      await supabase.rpc('proposer_rapprochement', {
+        p_depense: depense.id,
+        p_transaction: (corr as { transaction_id: string }).transaction_id,
+      });
+    }
+
     router.push('/depenses');
     router.refresh();
   }

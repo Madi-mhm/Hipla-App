@@ -5,7 +5,10 @@ import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import { money, date } from '@/lib/format';
-import { LIBELLE_STATUT, CLASSE_STATUT, type Depense } from '@/lib/types';
+import {
+  LIBELLE_STATUT, CLASSE_STATUT,
+  LIBELLE_RAPPROCHEMENT, CLASSE_RAPPROCHEMENT, type Depense,
+} from '@/lib/types';
 import ActionsValidation from '@/components/ActionsValidation';
 
 export const metadata = { title: 'Dépenses — Hipla Gestion' };
@@ -128,6 +131,7 @@ function Tableau({ depenses, peutValider }: { depenses: Depense[]; peutValider: 
             <th style={{ ...th, textAlign: 'right' }} className="col-secondaire">TVA réc.</th>
             <th style={{ ...th, textAlign: 'right' }}>TTC</th>
             <th style={{ ...th, textAlign: 'right' }}>Statut</th>
+            <th style={{ ...th, textAlign: 'right' }} className="col-secondaire">Banque</th>
             <th style={{ ...th, textAlign: 'right' }}></th>
             {peutValider && <th style={{ ...th, textAlign: 'right' }}>Action</th>}
           </tr>
@@ -166,6 +170,11 @@ function Tableau({ depenses, peutValider }: { depenses: Depense[]; peutValider: 
               <td style={{ ...td, textAlign: 'right', fontWeight: 600 }} className="amount">{money(Number(d.montant_ttc))}</td>
               <td style={{ ...td, textAlign: 'right' }}>
                 <span className={`badge ${CLASSE_STATUT[d.statut]}`}>{LIBELLE_STATUT[d.statut]}</span>
+              </td>
+              <td style={{ ...td, textAlign: 'right' }} className="col-secondaire">
+                <span className={`badge ${CLASSE_RAPPROCHEMENT[d.statut_rapprochement ?? 'sans_transaction']}`}>
+                  {LIBELLE_RAPPROCHEMENT[d.statut_rapprochement ?? 'sans_transaction']}
+                </span>
               </td>
               <td style={{ ...td, textAlign: 'right' }}>
                 <Link href={`/depenses/${d.id}`} className="btn btn--ghost"
