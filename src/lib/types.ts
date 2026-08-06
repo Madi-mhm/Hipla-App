@@ -31,13 +31,17 @@ export type Depense = {
   tva_deductible: number;
   moyen_paiement: string | null;
   paye_par: string | null;
-  statut: 'en_attente' | 'validee' | 'rejetee';
+  statut: 'en_attente' | 'validee' | 'rejetee' | 'annulee';
   cree_par: string;
   cree_le: string;
   valide_par: string | null;
   valide_le: string | null;
   motif_rejet: string | null;
   notes: string | null;
+  revu_le?: string | null;
+  revu_par?: string | null;
+  annule_le?: string | null;
+  motif_annulation?: string | null;
   categories?: Categorie;
   profils?: { nom_complet: string };
 };
@@ -65,7 +69,9 @@ export type Deplacement = {
   motif: string;
   kilometres: number;
   aller_retour: boolean;
-  statut: 'en_attente' | 'validee' | 'rejetee';
+  statut: 'en_attente' | 'validee' | 'rejetee' | 'annulee';
+  annule_le?: string | null;
+  motif_annulation?: string | null;
   cree_par: string;
   cree_le: string;
   vehicules?: Vehicule;
@@ -76,12 +82,14 @@ export const LIBELLE_STATUT: Record<string, string> = {
   en_attente: 'En attente',
   validee: 'Validée',
   rejetee: 'Rejetée',
+  annulee: 'Annulée',
 };
 
 export const CLASSE_STATUT: Record<string, string> = {
   en_attente: 'badge--warning',
   validee: 'badge--success',
   rejetee: 'badge--danger',
+  annulee: 'badge--neutral',
 };
 
 export type FraisCreation = {
@@ -134,3 +142,174 @@ export const LIBELLE_ASSOCIE: Record<string, string> = {
   mahdi: 'Mahdi Mohamadi',
   sabir: 'Sabir Mohamed Ahmed',
 };
+
+export type Commentaire = {
+  id: string;
+  table_cible: 'depenses' | 'frais_creation' | 'deplacements' | 'general';
+  id_cible: string | null;
+  numero_piece: string | null;
+  contenu: string;
+  type: 'remarque' | 'anomalie' | 'question' | 'demande_piece';
+  statut: 'ouvert' | 'resolu';
+  resolu_par: string | null;
+  resolu_le: string | null;
+  reponse: string | null;
+  cree_par: string;
+  cree_le: string;
+  profils?: { nom_complet: string };
+};
+
+export type Tache = {
+  id: string;
+  titre: string;
+  description: string | null;
+  echeance: string | null;
+  priorite: 'basse' | 'normale' | 'haute';
+  statut: 'a_faire' | 'en_cours' | 'faite' | 'annulee';
+  table_cible: string | null;
+  id_cible: string | null;
+  numero_piece: string | null;
+  assignee_a: string | null;
+  cree_par: string;
+  cree_le: string;
+  faite_le: string | null;
+  recurrence: 'mensuelle' | 'trimestrielle' | 'annuelle' | null;
+  assigne?: { nom_complet: string };
+  auteur?: { nom_complet: string };
+};
+
+export type Anomalie = {
+  id: string;
+  numero_piece: string | null;
+  source: string;
+  type: string;
+  message: string;
+  date_piece: string;
+  tiers: string;
+};
+
+export const LIBELLE_TYPE_COMMENTAIRE: Record<string, string> = {
+  remarque: 'Remarque',
+  anomalie: 'Anomalie',
+  question: 'Question',
+  demande_piece: 'Pièce demandée',
+};
+
+export const CLASSE_TYPE_COMMENTAIRE: Record<string, string> = {
+  remarque: 'badge--neutral',
+  anomalie: 'badge--danger',
+  question: 'badge--info',
+  demande_piece: 'badge--warning',
+};
+
+export const LIBELLE_PRIORITE: Record<string, string> = {
+  basse: 'Basse', normale: 'Normale', haute: 'Haute',
+};
+
+export const LIBELLE_STATUT_TACHE: Record<string, string> = {
+  a_faire: 'À faire', en_cours: 'En cours', faite: 'Faite', annulee: 'Annulée',
+};
+
+export const CLASSE_STATUT_TACHE: Record<string, string> = {
+  a_faire: 'badge--warning',
+  en_cours: 'badge--info',
+  faite: 'badge--success',
+  annulee: 'badge--neutral',
+};
+
+export const LIBELLE_TYPE_ANOMALIE: Record<string, string> = {
+  montants: 'Montants incohérents',
+  tva: 'TVA non déductible',
+  justificatif: 'Justificatif manquant',
+  exercice: 'Hors exercice',
+  ratification: 'Non ratifié',
+};
+
+export type Abonnement = {
+  id: string;
+  numero_piece: string | null;
+  nom: string;
+  fournisseur: string;
+  categorie_id: string | null;
+  montant_ht: number;
+  taux_tva: number;
+  montant_tva: number;
+  montant_ttc: number;
+  devise: string;
+  autoliquidation: boolean;
+  pays_prestataire: 'FR' | 'UE' | 'HORS_UE';
+  periodicite: 'mensuel' | 'trimestriel' | 'annuel';
+  date_debut: string;
+  date_fin: string | null;
+  mode_paiement: string | null;
+  engagement_jusquau: string | null;
+  preavis_jours: number | null;
+  url_espace_client: string | null;
+  identifiant_contrat: string | null;
+  statut: 'actif' | 'gratuit' | 'suspendu' | 'resilie';
+  motif_resiliation: string | null;
+  notes: string | null;
+  categories?: { libelle: string };
+};
+
+export type Echeance = {
+  id: string;
+  abonnement_id: string;
+  periode: string;
+  date_prevue: string;
+  date_constatee: string | null;
+  montant_prevu: number;
+  montant_reel: number | null;
+  statut: 'attendue' | 'payee' | 'justificatif_manquant' | 'ecart' | 'annulee';
+  depense_id: string | null;
+  transaction_qonto_id: string | null;
+  abonnements?: { nom: string; fournisseur: string };
+};
+
+export const LIBELLE_PERIODICITE: Record<string, string> = {
+  mensuel: 'Mensuel', trimestriel: 'Trimestriel', annuel: 'Annuel',
+};
+
+export const LIBELLE_STATUT_ABO: Record<string, string> = {
+  actif: 'Actif', gratuit: 'Gratuit', suspendu: 'Suspendu', resilie: 'Résilié',
+};
+
+export const CLASSE_STATUT_ABO: Record<string, string> = {
+  actif: 'badge--success',
+  gratuit: 'badge--info',
+  suspendu: 'badge--warning',
+  resilie: 'badge--neutral',
+};
+
+export const LIBELLE_STATUT_ECHEANCE: Record<string, string> = {
+  attendue: 'Attendue',
+  payee: 'Payée',
+  justificatif_manquant: 'Justificatif manquant',
+  ecart: 'Écart de montant',
+  annulee: 'Annulée',
+};
+
+export const CLASSE_STATUT_ECHEANCE: Record<string, string> = {
+  attendue: 'badge--neutral',
+  payee: 'badge--success',
+  justificatif_manquant: 'badge--danger',
+  ecart: 'badge--warning',
+  annulee: 'badge--neutral',
+};
+
+export const LIBELLE_PAYS: Record<string, string> = {
+  FR: 'France', UE: 'Union européenne', HORS_UE: 'Hors Union européenne',
+};
+
+/** Ramène un montant à son équivalent mensuel, toutes périodicités confondues. */
+export function coutMensuel(montant: number, periodicite: string): number {
+  if (periodicite === 'trimestriel') return montant / 3;
+  if (periodicite === 'annuel') return montant / 12;
+  return montant;
+}
+
+export function coutAnnuel(montant: number, periodicite: string): number {
+  if (periodicite === 'trimestriel') return montant * 4;
+  if (periodicite === 'annuel') return montant;
+  return montant * 12;
+}

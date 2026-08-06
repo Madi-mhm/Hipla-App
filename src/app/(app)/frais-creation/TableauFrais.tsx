@@ -23,6 +23,8 @@ import {
   type Categorie, type FraisCreation,
 } from '@/lib/types';
 import { detailsModification } from '@/lib/audit';
+import Dialogue from '@/components/Dialogue';
+import Alerte from '@/components/Alerte';
 import styles from './frais.module.css';
 
 type Props = {
@@ -37,6 +39,7 @@ export default function TableauFrais({ frais, categories, peutModifier }: Props)
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [recap, setRecap] = useState(false);
+  const [dialogueRatification, setDialogueRatification] = useState(false);
 
   const creation = frais.filter((f) => f.nature === 'creation');
   const preparation = frais.filter((f) => f.nature === 'preparation');
@@ -62,11 +65,6 @@ export default function TableauFrais({ frais, categories, peutModifier }: Props)
   }, [frais]);
 
   async function ratifierTout() {
-    if (!window.confirm(
-      `Marquer ${aRatifier.length} ligne(s) comme reprises ?\n\n` +
-      "À ne faire qu'après avoir tenu l'assemblée générale et signé le procès-verbal."
-    )) return;
-
     setEnCours(true);
     const supabase = createClient();
     const { error } = await supabase
@@ -146,7 +144,7 @@ export default function TableauFrais({ frais, categories, peutModifier }: Props)
               {recap ? 'Masquer' : 'Générer le tableau pour l\u2019AG'}
             </button>
             {peutModifier && (
-              <button onClick={ratifierTout} disabled={enCours} className="btn btn--ghost">
+              <button onClick={() => setDialogueRatification(true)} disabled={enCours} className="btn btn--ghost">
                 Marquer comme ratifiées
               </button>
             )}
@@ -250,11 +248,20 @@ export default function TableauFrais({ frais, categories, peutModifier }: Props)
         </div>
       )}
 
-      {erreur && (
-        <p className="card" style={{ background: 'var(--danger-bg)', color: 'var(--danger)', marginBottom: '1rem' }}>
-          {erreur}
-        </p>
-      )}
+      {erreur && <Alerte type="erreur" message={erreur} onFermer={() => setErreur(null)} />}
+
+      <Dialogue
+        ouvert={dialogueRatification}
+        titre={`Ratifier ${aRatifier.length} ligne${aRatifier.length > 1 ? 's' : ''}`}
+        description={
+          "À ne faire qu'après avoir tenu l'assemblée générale et signé le " +
+          "procès-verbal. Ces dépenses seront alors reprises par la société " +
+          "et inscrites au compte courant de l'associé qui les a avancées."
+        }
+        libelleValider="Confirmer la ratification"
+        onValider={() => { setDialogueRatification(false); ratifierTout(); }}
+        onAnnuler={() => setDialogueRatification(false)}
+      />
 
       {/* ---- Les deux blocs ---- */}
       <Bloc

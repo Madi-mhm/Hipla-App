@@ -14,6 +14,10 @@ export default async function Page() {
   const profil = await profilCourant();
   if (!profil) redirect('/connexion');
 
+  // Le comptable dispose de son propre écran d'accueil : l'y conduire
+  // directement évite de lui présenter un tableau de bord de dirigeant.
+  if (profil.role === 'comptable') redirect('/comptable');
+
   const pilote = profil.role === 'proprietaire';
   const actions = await construireActions(profil.role, profil.id);
 

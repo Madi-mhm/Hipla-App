@@ -27,7 +27,9 @@ type Entree = {
   horodatage: string;
 };
 
-export default function JournalAudit({ entrees }: { entrees: Entree[] }) {
+export default function JournalAudit({
+  entrees, restreint,
+}: { entrees: Entree[]; restreint?: boolean }) {
   const [ouverte, setOuverte] = useState<number | null>(null);
   const [filtreAction, setFiltreAction] = useState('');
   const [filtreUtilisateur, setFiltreUtilisateur] = useState('');
@@ -54,6 +56,13 @@ export default function JournalAudit({ entrees }: { entrees: Entree[] }) {
 
   return (
     <>
+      {restreint && (
+        <p className="card" style={{ marginBottom: '1rem', background: 'var(--info-bg)', color: 'var(--info)', fontSize: 'var(--fs-sm)', lineHeight: 1.55 }}>
+          Vue limitée aux écritures comptables. Les connexions et la gestion
+          des comptes utilisateurs ne sont pas accessibles depuis ce profil.
+        </p>
+      )}
+
       <div className="card" style={{ marginBottom: '1.25rem' }}>
         <p className="card__title">Filtres</p>
         <div className={styles.filtres}>

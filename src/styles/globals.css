@@ -21,8 +21,8 @@
   --g-100: #f1f3f5;
   --g-200: #e6e9ec;
   --g-300: #d3d8dd;
-  --g-400: #a9b1ba;
-  --g-500: #7d8791;
+  --g-400: #8d97a1;   /* assombri : 2,06:1 → 3,1:1, usage décoratif seulement */
+  --g-500: #5f6a75;   /* assombri : 3,47:1 → 5,1:1, conforme AA pour du texte */
   --g-600: #5b656f;
   --g-700: #3f4750;
   --g-800: #262c33;
@@ -305,6 +305,27 @@ table { width: 100%; border-collapse: collapse; }
 .amount--neg { color: var(--danger); }
 
 .muted { color: var(--g-500); }
+
+/* ============================================================
+   ÉTATS VIDES
+   Une liste vide doit expliquer ce qu'elle attend et proposer
+   l'action suivante : sur une application qui démarre, ce sont
+   les premiers écrans que l'utilisateur voit.
+   ============================================================ */
+.etat-vide {
+  padding: 2rem 1rem;
+  text-align: center;
+  max-width: 46ch;
+  margin-inline: auto;
+}
+.etat-vide > p:first-child {
+  font-family: var(--display);
+  font-weight: 600;
+  color: var(--navy);
+  margin-bottom: .4rem;
+}
+.etat-vide .muted { font-size: var(--fs-sm); line-height: 1.55; }
+.etat-vide .btn { margin-top: 1.1rem; }
 .mono { font-family: var(--mono); font-size: 0.9em; }
 
 /* ============================================================

@@ -137,7 +137,10 @@ function Tableau({ lignes, peutValider }: { lignes: Deplacement[]; peutValider: 
         </thead>
         <tbody>
           {lignes.map((d) => (
-            <tr key={d.id} style={{ borderBottom: '1px solid var(--g-200)' }}>
+            <tr key={d.id} style={{
+            borderBottom: '1px solid var(--g-200)',
+            opacity: d.statut === 'annulee' ? 0.45 : 1,
+          }}>
               <td style={td} className="mono">
                 <span style={{ fontSize: '.72rem', color: 'var(--g-600)' }}>
                   {d.numero_piece ?? '—'}

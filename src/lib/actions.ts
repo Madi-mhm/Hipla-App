@@ -13,6 +13,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { daysUntil } from '@/lib/format';
 import type { Role } from '@/lib/permissions';
+import { ECHEANCES } from '@/lib/echeances';
 
 export type Urgence = 'bloquant' | 'important' | 'a_faire' | 'info';
 
@@ -44,13 +45,9 @@ export const CLASSE_URGENCE: Record<Urgence, string> = {
   info: 'badge--neutral',
 };
 
-/** Échéances de l'exercice. Passeront en base à la ronde 10. */
-export const ECHEANCES = [
-  { libelle: 'Déclaration initiale CFE (formulaire 1447-C)', date: '2026-12-31' },
-  { libelle: 'Clôture du premier exercice', date: '2027-09-30' },
-  { libelle: 'Déclaration de TVA CA12E', date: '2027-12-31' },
-  { libelle: 'Liasse fiscale (2065)', date: '2027-12-31' },
-];
+// Les échéances vivent dans `echeances.ts` : ce module importe le client
+// Supabase serveur et ne doit pas être atteignable depuis un composant client.
+export { ECHEANCES } from '@/lib/echeances';
 
 export async function construireActions(
   role: Role,
@@ -64,12 +61,15 @@ export async function construireActions(
   // du même écran.
   const pilote = role === 'proprietaire';
 
-  const [depenses, deplacements, justificatifs] = await Promise.all([
+  const [depenses, deplacements, justificatifs, taches] = await Promise.all([
     supabase.from('depenses')
       .select('id, statut, fournisseur, montant_ttc, cree_par, motif_rejet'),
     supabase.from('deplacements')
       .select('id, statut, depart, arrivee, cree_par, motif_rejet'),
     supabase.from('justificatifs').select('depense_id'),
+    supabase.from('taches')
+      .select('id, titre, echeance, statut, assignee_a, priorite')
+      .in('statut', ['a_faire', 'en_cours']),
   ]);
 
   const lignesDep = depenses.data ?? [];
@@ -113,20 +113,52 @@ export async function construireActions(
     });
   }
 
-  // Mes saisies sans justificatif : à compléter avant validation.
-  const mesSansJustif = lignesDep.filter(
-    (d) => d.cree_par === utilisateurId && !avecJustif.has(d.id)
-  );
-  if (mesSansJustif.length > 0) {
+  // Tâches qui me sont assignées : c'est par ce canal que le comptable
+  // demande une pièce ou une correction sans passer par un courriel.
+  const mesTaches = (taches.data ?? []).filter((t) => t.assignee_a === utilisateurId);
+  const enRetard = mesTaches.filter((t) => t.echeance && daysUntil(t.echeance) < 0);
+
+  if (enRetard.length > 0) {
     actions.push({
-      id: 'mes-sans-justificatif',
-      urgence: 'a_faire',
-      titre: `${mesSansJustif.length} de vos dépenses sans justificatif`,
-      detail: "Sans pièce jointe, la charge n'est pas déductible.",
-      href: '/depenses',
-      libelleLien: 'Compléter',
-      compte: mesSansJustif.length,
+      id: 'taches-en-retard',
+      urgence: 'important',
+      titre: `${enRetard.length} tâche${enRetard.length > 1 ? 's' : ''} en retard`,
+      detail: enRetard.slice(0, 2).map((t) => t.titre).join(' · '),
+      href: '/taches',
+      libelleLien: 'Traiter',
+      compte: enRetard.length,
     });
+  } else if (mesTaches.length > 0) {
+    actions.push({
+      id: 'taches-assignees',
+      urgence: 'a_faire',
+      titre: `${mesTaches.length} tâche${mesTaches.length > 1 ? 's' : ''} à traiter`,
+      detail: mesTaches.slice(0, 2).map((t) => t.titre).join(' · '),
+      href: '/taches',
+      libelleLien: 'Voir',
+      compte: mesTaches.length,
+    });
+  }
+
+  // Mes saisies sans justificatif.
+  // Réservé au contributeur : le propriétaire dispose déjà de la règle
+  // globale plus bas, et afficher les deux produirait un doublon sur
+  // les mêmes écritures.
+  if (!pilote) {
+    const mesSansJustif = lignesDep.filter(
+      (d) => d.cree_par === utilisateurId && !avecJustif.has(d.id)
+    );
+    if (mesSansJustif.length > 0) {
+      actions.push({
+        id: 'mes-sans-justificatif',
+        urgence: 'a_faire',
+        titre: `${mesSansJustif.length} de vos dépenses sans justificatif`,
+        detail: "Sans pièce jointe, la charge n'est pas déductible.",
+        href: '/depenses',
+        libelleLien: 'Compléter',
+        compte: mesSansJustif.length,
+      });
+    }
   }
 
   // ================================================================
@@ -158,12 +190,72 @@ export async function construireActions(
   // RÈGLES RÉSERVÉES AU PROPRIÉTAIRE
   // ================================================================
 
-  const [vehicules, frais, sauvegardes] = await Promise.all([
+  const [vehicules, frais, sauvegardes, commentaires, echeancesAbo, abosEngages] = await Promise.all([
     supabase.from('vehicules').select('id, libelle, date_ct').eq('actif', true),
     supabase.from('frais_creation').select('id, statut_reprise, montant_ttc'),
     supabase.from('sauvegardes').select('demarree_le, statut')
       .eq('statut', 'reussie').order('demarree_le', { ascending: false }).limit(1),
+    supabase.from('commentaires').select('id, type, contenu, numero_piece')
+      .eq('statut', 'ouvert'),
+    supabase.from('abonnement_echeances')
+      .select('id, periode, statut, abonnements(nom)')
+      .eq('statut', 'justificatif_manquant'),
+    supabase.from('abonnements')
+      .select('id, nom, engagement_jusquau, preavis_jours')
+      .eq('statut', 'actif').not('engagement_jusquau', 'is', null),
   ]);
+
+  // ---- IMPORTANT : justificatifs d'abonnement manquants ----
+  // Regroupés en une seule action : huit abonnements ne doivent pas
+  // produire huit alertes.
+  const echManquantes = echeancesAbo.data ?? [];
+  if (echManquantes.length > 0) {
+    actions.push({
+      id: 'abonnements-justificatifs',
+      urgence: 'important',
+      titre: `${echManquantes.length} justificatif${echManquantes.length > 1 ? 's' : ''} d'abonnement manquant${echManquantes.length > 1 ? 's' : ''}`,
+      detail: "Sans facture, la TVA n'est pas récupérable sur ces prélèvements.",
+      href: '/abonnements',
+      libelleLien: 'Traiter',
+      compte: echManquantes.length,
+    });
+  }
+
+  // ---- Reconduction tacite ----
+  for (const a of abosEngages.data ?? []) {
+    if (!a.engagement_jusquau) continue;
+    const j = daysUntil(a.engagement_jusquau);
+    const marge = j - (a.preavis_jours ?? 30);
+    if (j < 0 || j > 60) continue;
+
+    actions.push({
+      id: `reconduction-${a.id}`,
+      urgence: marge <= 7 ? 'bloquant' : 'important',
+      titre: `Reconduction tacite — ${a.nom}`,
+      detail: marge > 0
+        ? `Il reste ${marge} jours pour résilier avant reconduction automatique.`
+        : 'Le délai de préavis est dépassé : la reconduction est acquise.',
+      href: '/abonnements',
+      libelleLien: 'Voir',
+    });
+  }
+
+  // ---- IMPORTANT : signalements du comptable non résolus ----
+  const signalements = commentaires.data ?? [];
+  if (signalements.length > 0) {
+    const pieces = signalements.filter((c) => c.type === 'demande_piece').length;
+    actions.push({
+      id: 'signalements-ouverts',
+      urgence: 'important',
+      titre: `${signalements.length} signalement${signalements.length > 1 ? 's' : ''} à traiter`,
+      detail: pieces > 0
+        ? `dont ${pieces} demande${pieces > 1 ? 's' : ''} de justificatif`
+        : signalements[0].contenu.slice(0, 70),
+      href: '/comptable',
+      libelleLien: 'Traiter',
+      compte: signalements.length,
+    });
+  }
 
   // ---- BLOQUANT : sauvegarde absente ou trop ancienne ----
   const derniere = (sauvegardes.data ?? [])[0];

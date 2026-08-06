@@ -1,0 +1,37 @@
+.fil { display: flex; flex-direction: column; gap: .55rem; margin-bottom: 1rem; }
+
+.ouvert, .resolu {
+  border: 1px solid var(--g-200);
+  border-left: 3px solid var(--gold);
+  border-radius: var(--radius);
+  padding: .65rem .85rem;
+  background: var(--g-50);
+}
+.resolu { border-left-color: var(--success); opacity: .6; }
+
+.entete {
+  display: flex; align-items: center; gap: .6rem;
+  flex-wrap: wrap; margin-bottom: .3rem;
+}
+.meta { font-size: var(--fs-xs); color: var(--g-500); margin-left: auto; }
+.texte { font-size: var(--fs-sm); line-height: 1.5; }
+.reponse {
+  font-size: var(--fs-sm); color: var(--success);
+  margin-top: .4rem; padding-top: .4rem;
+  border-top: 1px solid var(--g-200);
+}
+
+.formulaire {
+  display: grid; gap: .5rem;
+  grid-template-columns: 155px 1fr auto;
+  padding-top: .8rem; border-top: 1px solid var(--g-200);
+}
+.formulaire select, .formulaire input {
+  padding: .55rem .65rem; border: 1px solid var(--g-300);
+  border-radius: var(--radius); background: var(--g-0);
+  font-size: var(--fs-sm); min-height: 40px; width: 100%;
+}
+@media (max-width: 700px) {
+  .formulaire { grid-template-columns: 1fr; }
+  .formulaire select, .formulaire input { font-size: 16px; }
+}

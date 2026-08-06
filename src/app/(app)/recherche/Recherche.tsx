@@ -17,7 +17,7 @@ import styles from './recherche.module.css';
 type Piece = {
   id: string;
   numero: string | null;
-  nature: 'depense' | 'frais' | 'deplacement';
+  nature: 'depense' | 'frais' | 'deplacement' | 'abonnement';
   date: string;
   tiers: string;
   libelle: string | null;
@@ -32,10 +32,12 @@ const LIBELLE_NATURE: Record<string, string> = {
   depense: 'Dépense',
   frais: 'Frais de création',
   deplacement: 'Déplacement',
+  abonnement: 'Abonnement',
 };
 
 const CLASSE_STATUT: Record<string, string> = {
-  validee: 'badge--success', repris: 'badge--success',
+  validee: 'badge--success', repris: 'badge--success', actif: 'badge--success',
+  gratuit: 'badge--info', resilie: 'badge--neutral',
   en_attente: 'badge--warning', a_valider: 'badge--warning',
   rejetee: 'badge--danger', rejete: 'badge--neutral',
 };
@@ -110,6 +112,7 @@ export default function Recherche({ pieces }: { pieces: Piece[] }) {
               <option value="depense">Dépenses</option>
               <option value="frais">Frais de création</option>
               <option value="deplacement">Déplacements</option>
+              <option value="abonnement">Abonnements</option>
             </select></label>
           <label><span>Du</span>
             <input type="date" value={du} onChange={(e) => setDu(e.target.value)} /></label>
@@ -146,11 +149,22 @@ export default function Recherche({ pieces }: { pieces: Piece[] }) {
 
       <div className="card">
         {resultats.length === 0 ? (
-          <p className="muted" style={{ padding: '1.5rem 0', fontSize: 'var(--fs-sm)' }}>
-            {filtreActif
-              ? 'Aucune écriture ne correspond.'
-              : 'Saisissez une référence, un fournisseur ou un montant.'}
-          </p>
+          <div className="etat-vide">
+            {filtreActif ? (
+              <>
+                <p>Aucune écriture ne correspond.</p>
+                <p className="muted">Élargissez la période ou retirez un filtre.</p>
+              </>
+            ) : (
+              <>
+                <p>Que cherchez-vous ?</p>
+                <p className="muted">
+                  Un numéro de pièce (ACH-2026-0001), un fournisseur, un montant,
+                  ou un mot figurant dans une note.
+                </p>
+              </>
+            )}
+          </div>
         ) : (
           <div className="table-scroll">
             <table style={{ minWidth: 660, fontSize: 'var(--fs-sm)' }}>

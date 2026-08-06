@@ -29,6 +29,11 @@ export default async function Page() {
       .order('date_trajet', { ascending: false }),
   ]);
 
+  const { data: abos } = await supabase
+    .from('abonnements')
+    .select('id, numero_piece, date_debut, nom, fournisseur, montant_ttc, statut, notes, categories(libelle)')
+    .order('date_debut', { ascending: false });
+
   type Cat = { libelle: string } | { libelle: string }[] | null;
   const nomCat = (c: Cat) => (Array.isArray(c) ? c[0]?.libelle : c?.libelle) ?? null;
 
@@ -58,6 +63,19 @@ export default async function Page() {
       statut: f.statut_reprise,
       notes: f.notes,
       lien: '/frais-creation',
+    })),
+    ...(abos ?? []).map((a) => ({
+      id: a.id,
+      numero: a.numero_piece,
+      nature: 'abonnement' as const,
+      date: a.date_debut,
+      tiers: a.fournisseur,
+      libelle: a.nom,
+      categorie: nomCat(a.categories as Cat),
+      montant: Number(a.montant_ttc),
+      statut: a.statut,
+      notes: a.notes,
+      lien: '/abonnements',
     })),
     ...(depl ?? []).map((t) => ({
       id: t.id,

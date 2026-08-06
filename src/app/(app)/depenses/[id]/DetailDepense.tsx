@@ -18,6 +18,9 @@ import {
 import { money, date, dateLong } from '@/lib/format';
 import { LIBELLE_STATUT, CLASSE_STATUT, type Categorie, type Depense } from '@/lib/types';
 import { detailsModification, detailsSuppression } from '@/lib/audit';
+import BoutonRevue from '@/components/BoutonRevue';
+import Dialogue from '@/components/Dialogue';
+import Alerte from '@/components/Alerte';
 import styles from '../nouvelle/formulaire.module.css';
 
 type Fichier = {
@@ -36,15 +39,21 @@ type Props = {
   peutModifier: boolean;
   peutValider: boolean;
   peutSupprimer: boolean;
+  peutRevue: boolean;
+  nomRelecteur: string | null;
 };
 
 export default function DetailDepense({
   depense, categories, fichiers, peutModifier, peutValider, peutSupprimer,
+  peutRevue, nomRelecteur,
 }: Props) {
   const router = useRouter();
   const [edition, setEdition] = useState(false);
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [dialogueRejet, setDialogueRejet] = useState(false);
+  const [dialogueAnnulation, setDialogueAnnulation] = useState(false);
+  const [dialogueSuppression, setDialogueSuppression] = useState(false);
 
   const [dateDepense, setDateDepense] = useState(depense.date_depense);
   const [fournisseur, setFournisseur] = useState(depense.fournisseur);
@@ -150,13 +159,9 @@ export default function DetailDepense({
     router.refresh();
   }
 
-  async function statuer(statut: 'validee' | 'rejetee') {
-    let motif: string | null = null;
-    if (statut === 'rejetee') {
-      motif = window.prompt('Motif du rejet :');
-      if (motif === null) return;
-    }
+  async function statuer(statut: 'validee' | 'rejetee', motif: string | null = null) {
     setEnCours(true);
+    setErreur(null);
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase.from('depenses').update({
@@ -177,9 +182,36 @@ export default function DetailDepense({
     router.refresh();
   }
 
-  async function supprimer() {
-    if (!window.confirm('Supprimer définitivement cette dépense et ses justificatifs ?')) return;
+  /**
+   * Annule sans détruire. La numérotation des pièces doit rester continue :
+   * une écriture erronée est neutralisée, jamais effacée.
+   */
+  async function annuler(motif: string) {
     setEnCours(true);
+    setErreur(null);
+    const supabase = createClient();
+
+    const { error } = await supabase.rpc('annuler_ecriture', {
+      p_table: 'depenses', p_id: depense.id, p_motif: motif,
+    });
+
+    if (error) { setErreur(`Annulation impossible : ${error.message}`); setEnCours(false); return; }
+
+    await supabase.rpc('journaliser', {
+      p_action: 'modification', p_table: 'depenses', p_id: depense.id,
+      p_details: {
+        resume: `${depense.numero_piece ?? ''} · écriture annulée`,
+        motif,
+      },
+    });
+    setEnCours(false);
+    router.refresh();
+  }
+
+  /** Suppression physique : réservée aux saisies jamais validées. */
+  async function supprimer() {
+    setEnCours(true);
+    setErreur(null);
     const supabase = createClient();
     // L'enregistrement complet est conservé : c'est la seule trace qui
     // subsistera de la ligne effacée.
@@ -205,9 +237,34 @@ export default function DetailDepense({
         `${depense.numero_piece ?? ''} · ${depense.fournisseur} — ${Number(depense.montant_ttc).toFixed(2).replace('.', ',')} € TTC`
       ),
     });
+    // Les fichiers doivent partir avant la ligne : la suppression en
+    // cascade efface la référence, pas l'objet dans le bucket.
+    for (const f of fichiers) {
+      await supabase.storage.from('justificatifs').remove([f.chemin]);
+    }
+
     const { error } = await supabase.from('depenses').delete().eq('id', depense.id);
-    if (error) { setErreur(error.message); setEnCours(false); return; }
+    if (error) { setErreur(`Suppression impossible : ${error.message}`); setEnCours(false); return; }
     router.push('/depenses');
+    router.refresh();
+  }
+
+  /** Retire un justificatif isolé, fichier compris. */
+  async function retirerJustificatif(f: Fichier) {
+    setEnCours(true);
+    setErreur(null);
+    const supabase = createClient();
+
+    await supabase.storage.from('justificatifs').remove([f.chemin]);
+    const { error } = await supabase.from('justificatifs').delete().eq('id', f.id);
+
+    if (error) { setErreur(`Retrait impossible : ${error.message}`); setEnCours(false); return; }
+
+    await supabase.rpc('journaliser', {
+      p_action: 'suppression', p_table: 'justificatifs', p_id: f.id,
+      p_details: { resume: `Justificatif retiré : ${f.nom_original}`, piece: depense.numero_piece },
+    });
+    setEnCours(false);
     router.refresh();
   }
 
@@ -225,6 +282,43 @@ export default function DetailDepense({
 
   return (
     <div className={styles.form}>
+      <Dialogue
+        ouvert={dialogueRejet}
+        titre="Rejeter cette dépense"
+        description="Le motif sera visible par la personne qui l'a saisie."
+        champ="Motif du rejet" obligatoire libelleValider="Rejeter" danger
+        onValider={(m) => { setDialogueRejet(false); statuer('rejetee', m); }}
+        onAnnuler={() => setDialogueRejet(false)}
+      />
+
+      <Dialogue
+        ouvert={dialogueAnnulation}
+        titre="Annuler cette écriture"
+        description={
+          "L'écriture conserve son numéro de pièce et reste consultable, " +
+          "mais sort des totaux et des déclarations. La numérotation " +
+          "comptable doit rester continue : une pièce n'est jamais effacée."
+        }
+        champ="Motif de l'annulation" obligatoire
+        placeholder="Doublon, montant erroné, facture annulée par le fournisseur…"
+        libelleValider="Annuler l'écriture" danger
+        onValider={(m) => { setDialogueAnnulation(false); annuler(m); }}
+        onAnnuler={() => setDialogueAnnulation(false)}
+      />
+
+      <Dialogue
+        ouvert={dialogueSuppression}
+        titre="Supprimer définitivement"
+        description={
+          "Cette saisie n'a jamais été validée : elle peut être supprimée " +
+          "sans rompre la numérotation. Les justificatifs joints seront " +
+          "également effacés. Cette action est irréversible."
+        }
+        libelleValider="Supprimer" danger
+        onValider={() => { setDialogueSuppression(false); supprimer(); }}
+        onAnnuler={() => setDialogueSuppression(false)}
+      />
+
       {/* ---- Bandeau statut ---- */}
       <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
         <span className={`badge ${CLASSE_STATUT[depense.statut]}`}>
@@ -235,6 +329,15 @@ export default function DetailDepense({
           {depense.valide_le && ` · traitée le ${date(depense.valide_le)}`}
         </span>
 
+        {peutRevue && (
+          <BoutonRevue
+            table="depenses"
+            id={depense.id}
+            revuLe={depense.revu_le ?? null}
+            nomRelecteur={nomRelecteur}
+          />
+        )}
+
         {peutValider && depense.statut === 'en_attente' && (
           <span style={{ display: 'flex', gap: '.4rem' }}>
             <button onClick={() => statuer('validee')} disabled={enCours}
@@ -242,7 +345,7 @@ export default function DetailDepense({
               style={{ minHeight: 34, padding: '.3rem .8rem', fontSize: 'var(--fs-xs)', color: 'var(--success)', borderColor: 'var(--success)' }}>
               Valider
             </button>
-            <button onClick={() => statuer('rejetee')} disabled={enCours}
+            <button onClick={() => setDialogueRejet(true)} disabled={enCours}
               className="btn btn--ghost"
               style={{ minHeight: 34, padding: '.3rem .8rem', fontSize: 'var(--fs-xs)', color: 'var(--danger)' }}>
               Rejeter
@@ -254,6 +357,13 @@ export default function DetailDepense({
       {depense.motif_rejet && (
         <p className={styles.alerteRouge}>Motif du rejet : {depense.motif_rejet}</p>
       )}
+      {depense.motif_annulation && (
+        <p className={styles.alerteRouge}>
+          Écriture annulée — {depense.motif_annulation}
+        </p>
+      )}
+
+      {erreur && <Alerte type="erreur" message={erreur} onFermer={() => setErreur(null)} />}
 
       {/* ---- Contenu ---- */}
       {edition ? (
@@ -402,6 +512,13 @@ export default function DetailDepense({
                           Ouvrir
                         </a>
                       )}
+                      {peutModifier && (
+                        <button onClick={() => retirerJustificatif(f)} disabled={enCours}
+                          className="btn btn--ghost"
+                          style={{ minHeight: 30, padding: '.2rem .6rem', fontSize: 'var(--fs-xs)', color: 'var(--danger)' }}>
+                          Retirer
+                        </button>
+                      )}
                     </div>
                     {f.url && f.type_mime.startsWith('image/') && (
                       /* eslint-disable-next-line @next/next/no-img-element */
@@ -427,11 +544,18 @@ export default function DetailDepense({
             <button onClick={() => router.push('/depenses')} className="btn btn--ghost">
               Retour à la liste
             </button>
-            {peutSupprimer && (
-              <button onClick={supprimer} disabled={enCours} className="btn btn--ghost"
-                style={{ color: 'var(--danger)', marginLeft: 'auto' }}>
-                Supprimer
-              </button>
+            {peutSupprimer && depense.statut !== 'annulee' && (
+              depense.statut === 'en_attente' ? (
+                <button onClick={() => setDialogueSuppression(true)} disabled={enCours}
+                  className="btn btn--ghost" style={{ color: 'var(--danger)', marginLeft: 'auto' }}>
+                  Supprimer
+                </button>
+              ) : (
+                <button onClick={() => setDialogueAnnulation(true)} disabled={enCours}
+                  className="btn btn--ghost" style={{ color: 'var(--danger)', marginLeft: 'auto' }}>
+                  Annuler l'écriture
+                </button>
+              )
             )}
           </div>
         </>

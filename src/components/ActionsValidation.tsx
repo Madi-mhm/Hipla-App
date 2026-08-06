@@ -1,18 +1,19 @@
 'use client';
 
 /**
- * Boutons valider / rejeter, réservés au propriétaire.
+ * Validation ou rejet d'une saisie, depuis une liste.
  * La sécurité réelle vient des politiques RLS : un contributeur qui
  * appellerait cette action verrait sa requête refusée par la base.
  */
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import Dialogue from '@/components/Dialogue';
+import Alerte from '@/components/Alerte';
 
 export default function ActionsValidation({
-  table,
-  id,
-  resume,
+  table, id, resume,
 }: {
   table: 'depenses' | 'deplacements';
   id: string;
@@ -20,19 +21,13 @@ export default function ActionsValidation({
 }) {
   const router = useRouter();
   const [enCours, setEnCours] = useState(false);
+  const [dialogueRejet, setDialogueRejet] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
 
-  async function statuer(statut: 'validee' | 'rejetee') {
-    if (statut === 'rejetee') {
-      const motif = window.prompt('Motif du rejet (visible par le contributeur) :');
-      if (motif === null) return;
-      await appliquer(statut, motif);
-    } else {
-      await appliquer(statut, null);
-    }
-  }
-
-  async function appliquer(statut: string, motif: string | null) {
+  async function appliquer(statut: 'validee' | 'rejetee', motif: string | null) {
     setEnCours(true);
+    setErreur(null);
+
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -47,7 +42,7 @@ export default function ActionsValidation({
       .eq('id', id);
 
     if (error) {
-      alert(`Impossible d'enregistrer : ${error.message}`);
+      setErreur(`Enregistrement impossible : ${error.message}`);
       setEnCours(false);
       return;
     }
@@ -59,28 +54,48 @@ export default function ActionsValidation({
       p_details: { resume: resume ?? null, ...(motif ? { motif } : {}) },
     });
 
-    router.refresh();
     setEnCours(false);
+    router.refresh();
   }
 
   return (
-    <span style={{ display: 'inline-flex', gap: '.35rem' }}>
-      <button
-        onClick={() => statuer('validee')}
-        disabled={enCours}
-        className="btn btn--ghost"
-        style={{ minHeight: 30, padding: '.2rem .55rem', fontSize: '.72rem', color: 'var(--success)', borderColor: 'var(--success)' }}
-      >
-        Valider
-      </button>
-      <button
-        onClick={() => statuer('rejetee')}
-        disabled={enCours}
-        className="btn btn--ghost"
-        style={{ minHeight: 30, padding: '.2rem .55rem', fontSize: '.72rem', color: 'var(--danger)', borderColor: 'var(--g-300)' }}
-      >
-        Rejeter
-      </button>
-    </span>
+    <>
+      <span style={{ display: 'inline-flex', gap: '.35rem' }}>
+        <button
+          onClick={() => appliquer('validee', null)}
+          disabled={enCours}
+          className="btn btn--ghost"
+          style={{ minHeight: 30, padding: '.2rem .55rem', fontSize: '.72rem', color: 'var(--success)', borderColor: 'var(--success)' }}
+        >
+          Valider
+        </button>
+        <button
+          onClick={() => setDialogueRejet(true)}
+          disabled={enCours}
+          className="btn btn--ghost"
+          style={{ minHeight: 30, padding: '.2rem .55rem', fontSize: '.72rem', color: 'var(--danger)' }}
+        >
+          Rejeter
+        </button>
+      </span>
+
+      {erreur && <Alerte type="erreur" message={erreur} onFermer={() => setErreur(null)} />}
+
+      <Dialogue
+        ouvert={dialogueRejet}
+        titre="Rejeter cette saisie"
+        description={
+          (resume ? `${resume}. ` : '') +
+          "Le motif sera visible par la personne qui l'a saisie et lui permettra de corriger."
+        }
+        champ="Motif du rejet"
+        placeholder="Justificatif illisible, catégorie erronée…"
+        obligatoire
+        libelleValider="Rejeter"
+        danger
+        onValider={(motif) => { setDialogueRejet(false); appliquer('rejetee', motif); }}
+        onAnnuler={() => setDialogueRejet(false)}
+      />
+    </>
   );
 }

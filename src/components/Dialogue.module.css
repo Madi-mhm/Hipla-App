@@ -1,0 +1,58 @@
+.voile {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0, 21, 43, .45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 1.25rem;
+  animation: apparition .12s ease-out;
+}
+
+.boite {
+  background: var(--g-0);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  width: 100%; max-width: 460px;
+  box-shadow: 0 24px 60px -18px rgba(0, 21, 43, .5);
+}
+
+.titre {
+  font-family: var(--display); font-size: 1.05rem;
+  font-weight: 600; color: var(--navy);
+}
+.description {
+  font-size: var(--fs-sm); color: var(--g-600);
+  margin-top: .45rem; line-height: 1.55;
+}
+
+.champ { display: flex; flex-direction: column; gap: .3rem; margin-top: 1.1rem; }
+.champ span {
+  font-family: var(--display); font-size: .66rem; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--g-600);
+}
+.champ textarea {
+  padding: .6rem .7rem;
+  border: 1px solid var(--g-300);
+  border-radius: var(--radius);
+  background: var(--g-50);
+  font-size: var(--fs-base); font-family: var(--body);
+  resize: vertical; min-height: 76px; width: 100%;
+}
+.champ textarea:focus { background: var(--g-0); }
+@media (max-width: 768px) { .champ textarea { font-size: 16px; } }
+
+.erreur {
+  font-size: var(--fs-sm); color: var(--danger);
+  background: var(--danger-bg); padding: .5rem .7rem;
+  border-radius: var(--radius); margin-top: .7rem;
+}
+
+.actions {
+  display: flex; gap: .6rem; justify-content: flex-end;
+  margin-top: 1.3rem; flex-wrap: wrap;
+}
+@media (max-width: 460px) {
+  .actions { flex-direction: column-reverse; }
+  .actions button { width: 100%; }
+}
+
+@keyframes apparition { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .voile { animation: none; } }

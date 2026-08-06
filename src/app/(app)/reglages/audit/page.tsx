@@ -11,11 +11,16 @@ export const dynamic = 'force-dynamic';
 export default async function Page() {
   const profil = await profilCourant();
   if (!profil) redirect('/connexion');
-  if (!peut(profil.role, 'audit', 'read')) redirect('/');
 
+  const complet = peut(profil.role, 'audit', 'read');
+  const restreint = peut(profil.role, 'audit_comptable', 'read');
+  if (!complet && !restreint) redirect('/');
+
+  // Le comptable accède à la piste d'audit des écritures — exigible en
+  // contrôle — mais pas aux connexions ni à la gestion des comptes.
   const supabase = await createClient();
   const { data } = await supabase
-    .from('audit')
+    .from(complet ? 'audit' : 'v_audit_comptable')
     .select('*')
     .order('horodatage', { ascending: false })
     .limit(500);
@@ -24,10 +29,14 @@ export default async function Page() {
     <>
       <Header
         titre="Journal d'audit"
-        sousTitre="Trace de toutes les écritures — non modifiable, non supprimable"
+        sousTitre={
+          complet
+            ? 'Trace de toutes les écritures — non modifiable, non supprimable'
+            : 'Écritures comptables — connexions et gestion des comptes exclues'
+        }
       />
       <div className="content">
-        <JournalAudit entrees={data ?? []} />
+        <JournalAudit entrees={data ?? []} restreint={!complet} />
       </div>
     </>
   );

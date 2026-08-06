@@ -26,6 +26,7 @@ export default async function Page() {
   const depenses = (data ?? []) as Depense[];
   const attente = depenses.filter((d) => d.statut === 'en_attente');
   const validees = depenses.filter((d) => d.statut === 'validee');
+  const annulees = depenses.filter((d) => d.statut === 'annulee');
 
   const totalHT = validees.reduce((s, d) => s + Number(d.montant_ht), 0);
   const totalTVA = validees.reduce((s, d) => s + Number(d.tva_deductible), 0);
@@ -49,6 +50,15 @@ export default async function Page() {
             <p className="card__title">TVA récupérable</p>
             <p className="amount" style={{ fontSize: '1.35rem', fontFamily: 'var(--display)', fontWeight: 600 }}>
               {money(totalTVA)}
+            </p>
+          </div>
+          <div className="card">
+            <p className="card__title">Annulées</p>
+            <p className="amount" style={{ fontSize: '1.35rem', fontFamily: 'var(--display)', fontWeight: 600, color: 'var(--g-400)' }}>
+              {annulees.length}
+            </p>
+            <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.3rem' }}>
+              Hors totaux, numéro conservé
             </p>
           </div>
           <div className="card">
@@ -79,9 +89,19 @@ export default async function Page() {
         <div className="card">
           <p className="card__title">Toutes les dépenses</p>
           {depenses.length === 0 ? (
-            <p className="muted" style={{ fontSize: 'var(--fs-sm)', padding: '1rem 0' }}>
-              Aucune dépense enregistrée. Commencez par saisir vos factures d'achat.
-            </p>
+            <div className="etat-vide">
+              <p>Aucune dépense enregistrée.</p>
+              <p className="muted">
+                Saisissez vos factures d'achat au fil de l'eau : chaque pièce
+                jointe conditionne la déduction de la charge et la récupération
+                de la TVA.
+              </p>
+              {peutCreer && (
+                <Link href="/depenses/nouvelle" className="btn btn--gold">
+                  Saisir une première dépense
+                </Link>
+              )}
+            </div>
           ) : (
             <Tableau depenses={depenses} peutValider={false} />
           )}
@@ -111,7 +131,10 @@ function Tableau({ depenses, peutValider }: { depenses: Depense[]; peutValider: 
         </thead>
         <tbody>
           {depenses.map((d) => (
-            <tr key={d.id} style={{ borderBottom: '1px solid var(--g-200)' }}>
+            <tr key={d.id} style={{
+              borderBottom: '1px solid var(--g-200)',
+              opacity: d.statut === 'annulee' ? 0.45 : 1,
+            }}>
               <td style={td} className="mono">
                 <span style={{ fontSize: '.72rem', color: 'var(--g-600)' }}>
                   {d.numero_piece ?? '—'}

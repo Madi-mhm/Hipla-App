@@ -21,6 +21,8 @@ import {
 import { money } from '@/lib/format';
 import type { Categorie } from '@/lib/types';
 import { detailsCreation } from '@/lib/audit';
+import Dialogue from '@/components/Dialogue';
+import Alerte from '@/components/Alerte';
 import styles from './formulaire.module.css';
 
 type Props = { categories: Categorie[]; peutValider: boolean };
@@ -42,6 +44,7 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
   const [infoCompression, setInfoCompression] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
+  const [dialogueSansPiece, setDialogueSansPiece] = useState(false);
 
   const categorie = categories.find((c) => c.id === categorieId) ?? null;
 
@@ -99,12 +102,15 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
       return;
     }
     if (fichiers.length === 0) {
-      const suite = window.confirm(
-        "Aucun justificatif joint. Sans pièce, la charge n'est pas déductible et la TVA n'est pas récupérable.\n\nEnregistrer quand même ?"
-      );
-      if (!suite) return;
+      setDialogueSansPiece(true);
+      return;
     }
 
+    await enregistrer();
+  }
+
+  async function enregistrer() {
+    if (!categorie || !montants) return;
     setEnCours(true);
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -189,6 +195,20 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
   const groupes = Array.from(new Set(categories.map((c) => c.groupe)));
 
   return (
+    <>
+    <Dialogue
+      ouvert={dialogueSansPiece}
+      titre="Aucun justificatif joint"
+      description={
+        "Sans pièce, la charge n'est pas déductible du résultat et la TVA " +
+        "n'est pas récupérable. Vous pourrez ajouter le justificatif plus " +
+        "tard depuis le détail de la dépense."
+      }
+      libelleValider="Enregistrer quand même"
+      onValider={() => { setDialogueSansPiece(false); enregistrer(); }}
+      onAnnuler={() => setDialogueSansPiece(false)}
+    />
+
     <form onSubmit={soumettre} className={styles.form}>
       <div className="card">
         <p className="card__title">Facture</p>
@@ -347,7 +367,7 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
         </label>
       </div>
 
-      {erreur && <p className={styles.alerteRouge}>{erreur}</p>}
+      {erreur && <Alerte type="erreur" message={erreur} onFermer={() => setErreur(null)} />}
 
       <div className={styles.actions}>
         <button type="submit" className="btn btn--gold" disabled={enCours || categorie?.bloque}>
@@ -358,5 +378,6 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
         </button>
       </div>
     </form>
+    </>
   );
 }

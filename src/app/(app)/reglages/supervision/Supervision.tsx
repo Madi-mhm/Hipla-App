@@ -280,7 +280,11 @@ export default function Supervision({
             detail="comptes actifs"
           />
           <Compteur libelle="Factures émises" valeur={null} detail="ronde 8" />
-          <Compteur libelle="Abonnements" valeur={null} detail="ronde 5" />
+          <Compteur
+            libelle="Abonnements" href="/abonnements"
+            valeur={stats?.abonnements?.actifs ?? 0}
+            detail={`${money(Number(stats?.abonnements?.cout_annuel ?? 0))} par an`}
+          />
         </div>
       </div>
 

@@ -11,16 +11,18 @@ export type Role = 'proprietaire' | 'contributeur' | 'comptable' | 'salarie';
 
 export type Module =
   | 'entreprise' | 'utilisateurs' | 'depenses' | 'ventes' | 'abonnements'
-  | 'banque' | 'tva' | 'echeances' | 'documents' | 'exports' | 'audit';
+  | 'banque' | 'tva' | 'echeances' | 'documents' | 'exports' | 'audit'
+  | 'commentaires' | 'taches' | 'audit_comptable';
 
 export type Action =
-  | 'read' | 'create' | 'update' | 'delete' | 'validate' | 'export' | 'admin';
+  | 'read' | 'create' | 'update' | 'delete'
+  | 'validate' | 'export' | 'admin' | 'revue';
 
 const DROITS: Record<Role, Partial<Record<Module, Action[]>>> = {
   proprietaire: {
     entreprise: ['read', 'update'],
     utilisateurs: ['read', 'create', 'update', 'delete'],
-    depenses: ['read', 'create', 'update', 'delete', 'validate'],
+    depenses: ['read', 'create', 'update', 'delete', 'validate', 'revue'],
     ventes: ['read', 'create', 'update', 'delete', 'validate'],
     abonnements: ['read', 'create', 'update', 'delete'],
     banque: ['read', 'update'],
@@ -29,6 +31,9 @@ const DROITS: Record<Role, Partial<Record<Module, Action[]>>> = {
     documents: ['read', 'create', 'delete'],
     exports: ['read', 'export'],
     audit: ['read'],
+    audit_comptable: ['read'],
+    commentaires: ['read', 'create', 'update', 'delete'],
+    taches: ['read', 'create', 'update', 'delete'],
   },
   contributeur: {
     entreprise: ['read'],
@@ -40,10 +45,15 @@ const DROITS: Record<Role, Partial<Record<Module, Action[]>>> = {
     echeances: ['read'],
     documents: ['read', 'create'],
     exports: ['read'],
+    commentaires: ['read'],
+    taches: ['read'],
   },
+  // Le comptable consulte, extrait et annote. Il ne modifie aucune
+  // écriture : il signale, le propriétaire corrige. La correction reste
+  // ainsi tracée au nom de celui qui en porte la responsabilité.
   comptable: {
     entreprise: ['read'],
-    depenses: ['read'],
+    depenses: ['read', 'revue'],
     ventes: ['read'],
     abonnements: ['read'],
     banque: ['read'],
@@ -51,6 +61,11 @@ const DROITS: Record<Role, Partial<Record<Module, Action[]>>> = {
     echeances: ['read'],
     documents: ['read'],
     exports: ['read', 'export'],
+    // Journal restreint : les écritures comptables oui, les connexions
+    // et la gestion des comptes non. Minimisation appliquée au prestataire.
+    audit_comptable: ['read'],
+    commentaires: ['read', 'create'],
+    taches: ['read', 'create', 'update'],
   },
   salarie: {},
 };
@@ -73,7 +88,7 @@ export const DESCRIPTION_ROLE: Record<Role, string> = {
   contributeur:
     "Consulte tout. Peut saisir des dépenses et déposer des justificatifs : ces saisies passent en attente de validation par le propriétaire.",
   comptable:
-    "Consulte tout et exporte les données comptables. N'écrit aucune écriture.",
+    "Consulte l'ensemble des données, extrait les exports comptables, signale les anomalies et marque les écritures revues. Ne modifie ni ne valide aucune écriture.",
   salarie:
     "Accède uniquement à son espace personnel : contrat, bulletins, planning.",
 };
