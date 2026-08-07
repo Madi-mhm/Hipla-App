@@ -1,0 +1,99 @@
+.bandeau {
+  display: flex; justify-content: space-between;
+  gap: 1.5rem; flex-wrap: wrap; align-items: flex-start;
+}
+.actionsBandeau { display: flex; gap: .6rem; flex-wrap: wrap; }
+
+.alerte {
+  font-size: var(--fs-sm); color: var(--danger); background: var(--danger-bg);
+  padding: .6rem .8rem; border-radius: var(--radius); margin-top: .8rem;
+}
+
+.totaux {
+  display: grid; gap: .35rem; margin-top: 1.2rem;
+  padding-top: 1rem; border-top: 1px solid var(--g-200);
+  max-width: 340px; margin-left: auto;
+}
+.totaux > div {
+  display: flex; justify-content: space-between;
+  align-items: baseline; font-size: var(--fs-sm);
+}
+.totaux span { color: var(--g-500); }
+.totaux strong { font-family: var(--display); }
+.totalFinal {
+  border-top: 1px solid var(--g-300);
+  padding-top: .5rem; margin-top: .3rem;
+}
+.totalFinal strong { font-size: 1.1rem; color: var(--navy); }
+
+.formulaireLigne {
+  display: grid; gap: .7rem; margin-top: 1.3rem;
+  padding-top: 1.1rem; border-top: 1px solid var(--g-200);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+}
+.pleine { grid-column: 1 / -1; }
+.formulaireLigne label { display: flex; flex-direction: column; gap: .25rem; }
+.formulaireLigne span {
+  font-family: var(--display); font-size: .62rem; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--g-500);
+}
+.formulaireLigne input, .formulaireLigne select {
+  padding: .5rem .65rem; border: 1px solid var(--g-300);
+  border-radius: var(--radius); background: var(--g-50);
+  font-size: var(--fs-sm); min-height: 40px; width: 100%;
+}
+@media (max-width: 768px) {
+  .formulaireLigne input, .formulaireLigne select { font-size: 16px; }
+}
+
+.mentions {
+  font-size: var(--fs-sm); line-height: 1.6; color: var(--g-700);
+  background: var(--g-50); border-radius: var(--radius);
+  padding: 1rem 1.2rem;
+}
+
+.voile {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0, 21, 43, .45);
+  display: flex; align-items: center; justify-content: center; padding: 1.25rem;
+}
+.boite {
+  background: var(--g-0); border-radius: var(--radius);
+  padding: 1.5rem; width: 100%; max-width: 500px;
+  box-shadow: 0 24px 60px -18px rgba(0, 21, 43, .5);
+  max-height: 90vh; overflow-y: auto;
+}
+.titreDialogue {
+  font-family: var(--display); font-size: 1.05rem;
+  font-weight: 600; color: var(--navy);
+}
+.descriptionDialogue {
+  font-size: var(--fs-sm); color: var(--g-600);
+  margin-top: .45rem; line-height: 1.55;
+}
+.champsDialogue {
+  display: grid; gap: .7rem; margin-top: 1.1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+}
+.pleineDialogue { grid-column: 1 / -1; }
+.champsDialogue label { display: flex; flex-direction: column; gap: .28rem; }
+.champsDialogue span {
+  font-family: var(--display); font-size: .64rem; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--g-600);
+}
+.champsDialogue input, .champsDialogue select {
+  padding: .55rem .7rem; border: 1px solid var(--g-300);
+  border-radius: var(--radius); background: var(--g-50);
+  font-size: var(--fs-sm); min-height: 42px; width: 100%;
+}
+@media (max-width: 768px) {
+  .champsDialogue input, .champsDialogue select { font-size: 16px; }
+}
+.actionsDialogue {
+  display: flex; gap: .6rem; justify-content: flex-end;
+  margin-top: 1.3rem; flex-wrap: wrap;
+}
+@media (max-width: 460px) {
+  .actionsDialogue { flex-direction: column-reverse; }
+  .actionsDialogue button { width: 100%; }
+}

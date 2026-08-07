@@ -1,12 +1,18 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import Header from '@/components/Header';
 import { profilCourant } from '@/lib/auth';
-import { createClient } from '@/lib/supabase/server';
-import { money, dateLong, daysUntil } from '@/lib/format';
-import {
-  construireActions, LIBELLE_URGENCE, CLASSE_URGENCE, ECHEANCES,
-} from '@/lib/actions';
+
+/**
+ * L'ACCUEIL MÈNE À LA SÉANCE
+ *
+ * Le centre d'action lançait quatorze requêtes sur les anciennes tables
+ * et, depuis la bascule du registre, ne voyait plus rien. Il redémontrait
+ * par ailleurs des règles que les vues établissaient déjà — trois
+ * définitions concurrentes de « ce qui ne va pas ».
+ *
+ * La séance hebdomadaire le remplace intégralement, avec une seule
+ * lecture et une seule définition. Plutôt que de laisser cohabiter deux
+ * écrans dont l'un ment, l'accueil conduit désormais au bon.
+ */
 
 export const dynamic = 'force-dynamic';
 
@@ -14,159 +20,9 @@ export default async function Page() {
   const profil = await profilCourant();
   if (!profil) redirect('/connexion');
 
-  // Le comptable dispose de son propre écran d'accueil : l'y conduire
-  // directement évite de lui présenter un tableau de bord de dirigeant.
+  // Le comptable a son propre espace : l'y conduire évite de lui
+  // présenter un écran de dirigeant.
   if (profil.role === 'comptable') redirect('/comptable');
 
-  const pilote = profil.role === 'proprietaire';
-  const actions = await construireActions(profil.role, profil.id);
-
-  const supabase = await createClient();
-  const { data: dep } = await supabase
-    .from('depenses').select('montant_ht, tva_deductible, statut');
-  const validees = (dep ?? []).filter((d) => d.statut === 'validee');
-  const totalHT = validees.reduce((s, d) => s + Number(d.montant_ht), 0);
-  const totalTVA = validees.reduce((s, d) => s + Number(d.tva_deductible), 0);
-
-  const prochaine = ECHEANCES
-    .map((e) => ({ ...e, j: daysUntil(e.date) }))
-    .filter((e) => e.j >= 0)
-    .sort((a, b) => a.j - b.j)[0];
-
-  const prenom = profil.nom_complet.split(' ')[0];
-
-  return (
-    <>
-      <Header
-        titre="Centre d'action"
-        sousTitre={`Bonjour ${prenom} — ce qu'il y a à faire aujourd'hui`}
-      />
-
-      <div className="content">
-        <section style={{ marginBottom: '1.5rem' }}>
-          {actions.length === 0 ? (
-            <div className="card" style={{ borderLeft: '3px solid var(--success)' }}>
-              <p style={{ fontFamily: 'var(--display)', fontWeight: 600, color: 'var(--success)' }}>
-                Tout est à jour.
-              </p>
-              <p className="muted" style={{ fontSize: 'var(--fs-sm)', marginTop: '.3rem' }}>
-                Aucune action en attente.
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gap: '.6rem' }}>
-              {actions.map((a) => (
-                <div
-                  key={a.id}
-                  className="card"
-                  style={{
-                    borderLeft: `3px solid ${
-                      a.urgence === 'bloquant' ? 'var(--danger)'
-                      : a.urgence === 'important' ? 'var(--warning)'
-                      : a.urgence === 'a_faire' ? 'var(--info)'
-                      : 'var(--g-300)'
-                    }`,
-                    padding: '.9rem 1.1rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '1rem',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <span className={`badge ${CLASSE_URGENCE[a.urgence]}`} style={{ flexShrink: 0 }}>
-                    {LIBELLE_URGENCE[a.urgence]}
-                  </span>
-                  <div style={{ flex: 1, minWidth: 180 }}>
-                    <p style={{ fontFamily: 'var(--display)', fontWeight: 600, fontSize: 'var(--fs-sm)' }}>
-                      {a.titre}
-                    </p>
-                    {a.detail && (
-                      <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.15rem' }}>
-                        {a.detail}
-                      </p>
-                    )}
-                  </div>
-                  <Link href={a.href} className="btn btn--ghost" style={{ minHeight: 34, padding: '.35rem .9rem', fontSize: 'var(--fs-xs)', flexShrink: 0 }}>
-                    {a.libelleLien}
-                  </Link>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {pilote && (
-        <div className="grid-cards" style={{ marginBottom: '1.5rem' }}>
-          <div className="card">
-            <p className="card__title">Charges validées (HT)</p>
-            <p className="amount" style={{ fontSize: '1.4rem', fontFamily: 'var(--display)', fontWeight: 600 }}>
-              {money(totalHT)}
-            </p>
-          </div>
-          <div className="card">
-            <p className="card__title">TVA récupérable</p>
-            <p className="amount" style={{ fontSize: '1.4rem', fontFamily: 'var(--display)', fontWeight: 600 }}>
-              {money(totalTVA)}
-            </p>
-          </div>
-          <div className="card">
-            <p className="card__title">Prochaine échéance</p>
-            <p style={{ fontFamily: 'var(--display)', fontWeight: 600, fontSize: 'var(--fs-sm)' }}>
-              {prochaine?.libelle}
-            </p>
-            <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.3rem' }}>
-              {prochaine && `${dateLong(prochaine.date)} — dans ${prochaine.j} jours`}
-            </p>
-          </div>
-        </div>
-        )}
-
-        {pilote && (
-        <div className="card">
-          <p className="card__title">Échéances de l'exercice</p>
-          <div className="table-scroll">
-            <table style={{ minWidth: 460, fontSize: 'var(--fs-sm)' }}>
-              <tbody>
-                {ECHEANCES.map((e) => {
-                  const j = daysUntil(e.date);
-                  const classe = j < 0 ? 'badge--danger' : j <= 30 ? 'badge--warning' : 'badge--neutral';
-                  return (
-                    <tr key={e.libelle} style={{ borderBottom: '1px solid var(--g-200)' }}>
-                      <td style={{ padding: '.6rem .3rem' }}>{e.libelle}</td>
-                      <td style={{ padding: '.6rem .3rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        {dateLong(e.date)}
-                      </td>
-                      <td style={{ padding: '.6rem .3rem', textAlign: 'right', width: 96 }}>
-                        <span className={`badge ${classe}`}>{j < 0 ? 'dépassée' : `J-${j}`}</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        )}
-
-        {!pilote && (
-          <div className="card">
-            <p className="card__title">Vos accès</p>
-            <p style={{ fontSize: 'var(--fs-sm)', lineHeight: 1.6, maxWidth: '60ch' }}>
-              Vous pouvez consulter l'ensemble des données comptables et saisir
-              vos dépenses et déplacements. Vos saisies sont soumises à
-              validation avant d'entrer en comptabilité.
-            </p>
-            <div style={{ display: 'flex', gap: '.6rem', marginTop: '1rem', flexWrap: 'wrap' }}>
-              <Link href="/depenses/nouvelle" className="btn btn--gold">
-                + Nouvelle dépense
-              </Link>
-              <Link href="/deplacements/nouveau" className="btn btn--ghost">
-                + Nouveau trajet
-              </Link>
-            </div>
-          </div>
-        )}
-      </div>
-    </>
-  );
+  redirect('/seance');
 }

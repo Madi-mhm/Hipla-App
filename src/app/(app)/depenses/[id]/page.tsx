@@ -3,10 +3,11 @@ import Header from '@/components/Header';
 import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
+import { statutSaisie, type Candidat } from '@/lib/registre';
 import DetailDepense from './DetailDepense';
 import Commentaires from '@/components/Commentaires';
-import Rapprochement from '@/components/Rapprochement';
-import type { Categorie, Depense, Commentaire, TransactionQonto } from '@/lib/types';
+import Rapprochement, { type OperationLibre } from '@/components/Rapprochement';
+import type { Categorie, Depense, Commentaire } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,44 +20,68 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   const supabase = await createClient();
 
-  const { data: depense } = await supabase
-    .from('depenses')
-    .select('*, categories(*), profils!depenses_cree_par_fkey(nom_complet)')
+  const { data: piece } = await supabase
+    .from('pieces')
+    .select('*, categories(*)')
     .eq('id', id)
     .single();
 
-  if (!depense) notFound();
+  if (!piece || !['achat', 'creation', 'km'].includes(piece.nature)) notFound();
 
-  const [{ data: cats }, { data: justifs }, { data: commentaires }, { data: relecteur }] =
+  const [{ data: cats }, { data: justifs }, { data: commentaires },
+         { data: relecteur }, { data: reglements }] =
     await Promise.all([
       supabase.from('categories').select('*').eq('actif', true).order('ordre'),
-      supabase.from('justificatifs').select('*').eq('depense_id', id),
+      supabase.from('justificatifs').select('*').eq('piece_id', id),
       supabase.from('commentaires')
         .select('*, profils!commentaires_cree_par_fkey(nom_complet)')
         .eq('table_cible', 'depenses').eq('id_cible', id)
         .order('cree_le', { ascending: false }),
-      depense.revu_par
-        ? supabase.from('profils').select('nom_complet').eq('id', depense.revu_par).single()
+      piece.revu_par
+        ? supabase.from('profils').select('nom_complet').eq('id', piece.revu_par).single()
         : Promise.resolve({ data: null }),
+      supabase.from('reglements').select('*, transactions_qonto(*)')
+        .eq('piece_id', id).order('date_reglement'),
     ]);
 
-  // Opérations bancaires liées ou disponibles pour un rapprochement manuel.
-  const [{ data: proposee }, { data: confirmee }, { data: libres }] = await Promise.all([
-    depense.transaction_proposee_id
-      ? supabase.from('transactions_qonto').select('*')
-          .eq('id', depense.transaction_proposee_id).single()
-      : Promise.resolve({ data: null }),
-    depense.transaction_qonto_id
-      ? supabase.from('transactions_qonto').select('*')
-          .eq('id', depense.transaction_qonto_id).single()
-      : Promise.resolve({ data: null }),
-    supabase.from('transactions_qonto').select('*')
+  // L'opération bancaire rattachée se lit sur les règlements : c'est là
+  // que vit le lien depuis que le moteur d'appariement crée un règlement
+  // plutôt qu'un simple rattachement.
+  const avecTransaction = (reglements ?? []).find((r) => r.transactions_qonto);
+  const t = avecTransaction?.transactions_qonto as Record<string, unknown> | undefined;
+  const rattachee = t
+    ? {
+        id: String(t.id),
+        numero_piece: t.numero_piece ? String(t.numero_piece) : null,
+        date_operation: String(t.date_operation),
+        montant: Math.abs(Number(t.montant)),
+        libelle: String(t.contrepartie ?? t.libelle ?? ''),
+      }
+    : null;
+
+  // Le moteur ne propose que si rien n'est encore rattaché.
+  let candidats: Candidat[] = [];
+  let operationsLibres: OperationLibre[] = [];
+
+  if (!rattachee && piece.attendu_en_banque) {
+    const { data } = await supabase.rpc('candidats_pour_piece', { p_piece: id });
+    candidats = ((data ?? []) as Candidat[]).filter((c) => c.decision !== 'ecarte');
+
+    // Toutes les opérations libres du même sens, pour le rapprochement
+    // manuel. Un moteur qui se tait doit toujours laisser un recours :
+    // sans cette liste, une écriture sans candidat restait bloquée.
+    const { data: libres } = await supabase
+      .from('transactions_qonto')
+      .select('id, numero_piece, date_operation, montant, libelle, contrepartie')
       .eq('statut_traitement', 'a_traiter')
       .eq('statut_qonto', 'completed')
-      .eq('sens', 'debit')
+      .eq('sens', piece.sens)
       .order('date_operation', { ascending: false })
-      .limit(50),
-  ]);
+      .limit(100);
+
+    operationsLibres = ((libres ?? []) as OperationLibre[])
+      .map((o) => ({ ...o, montant: Math.abs(Number(o.montant)) }));
+  }
 
   // Le bucket est privé : on génère des URL signées, valables une heure.
   const fichiers = await Promise.all(
@@ -67,21 +92,33 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     })
   );
 
+  const statut = statutSaisie(piece.etat);
+
   // Le propriétaire modifie tout ; le contributeur seulement ses propres
   // saisies encore en attente.
   const peutModifier =
     peut(profil.role, 'depenses', 'update') ||
-    (depense.cree_par === profil.id && depense.statut === 'en_attente');
+    (piece.cree_par === profil.id && statut === 'en_attente');
+
+  const depense = {
+    ...piece,
+    date_depense: piece.date_piece,
+    fournisseur: piece.tiers_libelle,
+    libelle: piece.objet,
+    tva_deductible: piece.tva_comptable,
+    statut,
+    montant_encaisse: piece.montant_regle,
+  };
 
   return (
     <>
       <Header
-        titre={depense.fournisseur}
-        sousTitre={depense.numero_piece ? `Pièce ${depense.numero_piece}` : 'Détail de la dépense'}
+        titre={piece.tiers_libelle}
+        sousTitre={piece.numero_piece ? `Pièce ${piece.numero_piece}` : 'Détail de la dépense'}
       />
       <div className="content">
         <DetailDepense
-          depense={depense as Depense}
+          depense={depense as unknown as Depense}
           categories={(cats ?? []) as Categorie[]}
           fichiers={fichiers}
           peutModifier={peutModifier}
@@ -93,12 +130,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
         <div style={{ marginTop: '1rem' }}>
           <Rapprochement
-            depenseId={id}
-            statut={depense.statut_rapprochement ?? 'sans_transaction'}
-            rechercheAuto={depense.recherche_auto ?? true}
-            transactionProposee={(proposee ?? null) as TransactionQonto | null}
-            transactionConfirmee={(confirmee ?? null) as TransactionQonto | null}
-            transactionsLibres={(libres ?? []) as TransactionQonto[]}
+            pieceId={id}
+            attenduEnBanque={piece.attendu_en_banque}
+            resteDu={Number(piece.net_a_payer) - Number(piece.montant_regle)}
+            rattachee={rattachee}
+            candidats={candidats}
+            operationsLibres={operationsLibres}
             peutGerer={peut(profil.role, 'banque', 'update')}
           />
         </div>
@@ -108,7 +145,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
             commentaires={(commentaires ?? []) as Commentaire[]}
             tableCible="depenses"
             idCible={id}
-            numeroPiece={depense.numero_piece}
+            numeroPiece={piece.numero_piece}
             utilisateurId={profil.id}
             peutCommenter={peut(profil.role, 'commentaires', 'create')}
             peutResoudre={peut(profil.role, 'commentaires', 'update')}

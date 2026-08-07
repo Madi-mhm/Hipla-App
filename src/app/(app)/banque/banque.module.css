@@ -44,6 +44,12 @@
   font-family: var(--display); font-size: .66rem; font-weight: 600;
   letter-spacing: .1em; text-transform: uppercase; color: var(--g-600);
 }
+.champDialogue input[type='file'] {
+  padding: .6rem; border: 1px dashed var(--g-300);
+  border-radius: var(--radius); background: var(--g-50);
+  font-size: var(--fs-sm); width: 100%; cursor: pointer;
+}
+
 .champDialogue select {
   padding: .6rem .7rem;
   border: 1px solid var(--g-300);
@@ -52,7 +58,13 @@
   font-size: var(--fs-base);
   min-height: 42px; width: 100%;
 }
-@media (max-width: 768px) { .champDialogue select { font-size: 16px; } }
+@media (max-width: 768px) { .champDialogue input[type='file'] {
+  padding: .6rem; border: 1px dashed var(--g-300);
+  border-radius: var(--radius); background: var(--g-50);
+  font-size: var(--fs-sm); width: 100%; cursor: pointer;
+}
+
+.champDialogue select { font-size: 16px; } }
 
 .actionsDialogue {
   display: flex; gap: .6rem; justify-content: flex-end;

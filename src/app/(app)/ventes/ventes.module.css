@@ -1,0 +1,40 @@
+.barre {
+  display: flex; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap; align-items: center;
+}
+
+.onglets { display: flex; gap: .4rem; }
+.onglet, .ongletActif {
+  padding: .4rem .85rem;
+  border: 1px solid var(--g-300); border-radius: var(--radius);
+  background: var(--g-50);
+  font-family: var(--display); font-size: var(--fs-xs); font-weight: 600;
+  color: var(--g-600); cursor: pointer; min-height: 34px;
+}
+.onglet:hover { border-color: var(--gold); }
+.ongletActif { background: var(--navy); color: var(--bone); border-color: var(--navy); }
+
+.formulaire {
+  display: grid; gap: .8rem; margin-top: 1.1rem;
+  padding-top: 1.1rem; border-top: 1px solid var(--g-200);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+}
+.pleine { grid-column: 1 / -1; }
+.formulaire label { display: flex; flex-direction: column; gap: .28rem; }
+.formulaire > label > span {
+  font-family: var(--display); font-size: .64rem; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--g-500);
+}
+.formulaire input, .formulaire select {
+  padding: .55rem .7rem; border: 1px solid var(--g-300);
+  border-radius: var(--radius); background: var(--g-50);
+  font-size: var(--fs-sm); min-height: 40px; width: 100%;
+}
+@media (max-width: 768px) {
+  .formulaire input, .formulaire select { font-size: 16px; }
+}
+
+.note {
+  font-size: var(--fs-sm); color: var(--info); background: var(--info-bg);
+  padding: .6rem .8rem; border-radius: var(--radius); line-height: 1.5;
+}

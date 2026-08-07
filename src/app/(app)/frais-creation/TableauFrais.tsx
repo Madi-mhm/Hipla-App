@@ -46,20 +46,28 @@ export default function TableauFrais({ frais, categories, peutModifier }: Props)
   const aRatifier = frais.filter((f) => f.statut_reprise === 'a_valider');
 
   const totaux = useMemo(() => {
+    // Une ligne écartée ne fait plus partie de la reprise : ni la société
+    // ne la doit à l'associé, ni sa TVA n'est récupérable. L'inclure
+    // gonflerait le compte courant et fausserait la déclaration.
+    const retenues = frais.filter((f) => f.statut_reprise !== 'rejete');
+
     const parAssocie: Record<string, { ttc: number; tva: number; n: number }> = {};
-    for (const f of frais) {
+    for (const f of retenues) {
       const k = f.associe_payeur;
       parAssocie[k] ??= { ttc: 0, tva: 0, n: 0 };
       parAssocie[k].ttc += Number(f.montant_ttc);
       parAssocie[k].tva += Number(f.tva_deductible);
       parAssocie[k].n += 1;
     }
+
     return {
       parAssocie,
-      totalTTC: frais.reduce((s, f) => s + Number(f.montant_ttc), 0),
-      totalTVA: frais.reduce((s, f) => s + Number(f.tva_deductible), 0),
-      totalHT: frais.reduce((s, f) => s + Number(f.montant_ht), 0),
-      ratifie: frais.filter((f) => f.statut_reprise === 'repris')
+      nbRetenues: retenues.length,
+      nbEcartees: frais.length - retenues.length,
+      totalTTC: retenues.reduce((s, f) => s + Number(f.montant_ttc), 0),
+      totalTVA: retenues.reduce((s, f) => s + Number(f.tva_deductible), 0),
+      totalHT: retenues.reduce((s, f) => s + Number(f.montant_ht), 0),
+      ratifie: retenues.filter((f) => f.statut_reprise === 'repris')
         .reduce((s, f) => s + Number(f.montant_ttc), 0),
     };
   }, [frais]);
@@ -101,7 +109,8 @@ export default function TableauFrais({ frais, categories, peutModifier }: Props)
             {money(totaux.totalTTC)}
           </p>
           <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.3rem' }}>
-            {frais.length} lignes · {money(totaux.totalHT)} HT
+            {totaux.nbRetenues} ligne{totaux.nbRetenues > 1 ? 's' : ''} · {money(totaux.totalHT)} HT
+            {totaux.nbEcartees > 0 && ` · ${totaux.nbEcartees} écartée${totaux.nbEcartees > 1 ? 's' : ''}`}
           </p>
         </div>
         <div className="card">
@@ -293,7 +302,9 @@ function Bloc({
   edite: string | null; setEdite: (v: string | null) => void;
 }) {
   if (lignes.length === 0) return null;
-  const total = lignes.reduce((s, f) => s + Number(f.montant_ttc), 0);
+  const total = lignes
+    .filter((f) => f.statut_reprise !== 'rejete')
+    .reduce((s, f) => s + Number(f.montant_ttc), 0);
 
   return (
     <div className="card" style={{ marginBottom: '1.25rem' }}>
@@ -320,7 +331,10 @@ function Bloc({
               edite === f.id ? (
                 <LigneEdition key={f.id} frais={f} categories={categories} fermer={() => setEdite(null)} />
               ) : (
-                <tr key={f.id} style={{ borderBottom: '1px solid var(--g-200)' }}>
+                <tr key={f.id} style={{
+                  borderBottom: '1px solid var(--g-200)',
+                  opacity: f.statut_reprise === 'rejete' ? 0.45 : 1,
+                }}>
                   <td style={td} className="mono">
                     <span style={{ fontSize: '.72rem', color: 'var(--g-600)' }}>
                       {f.numero_piece ?? '—'}

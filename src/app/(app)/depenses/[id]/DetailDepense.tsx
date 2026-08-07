@@ -87,33 +87,34 @@ export default function DetailDepense({
 
     setEnCours(true);
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
 
-    const { error } = await supabase.from('depenses').update({
-      date_depense: dateDepense,
-      fournisseur: fournisseur.trim(),
-      libelle: libelle.trim() || null,
-      categorie_id: categorie.id,
-      montant_ht: montants.ht,
-      taux_tva: tauxTva,
-      montant_tva: montants.tva,
-      montant_ttc: montants.ttc,
-      taux_deductibilite: categorie.taux_deductibilite,
-      compte: categorie.compte,
-      tva_deductible: tvaRec,
-      notes: notes.trim() || null,
-    }).eq('id', depense.id);
+    // Les montants et la TVA sont recalculés en base : c'était un second
+    // endroit où vivait la règle d'arrondi.
+    const { error } = await supabase.rpc('modifier_achat', {
+      p_piece: depense.id,
+      p_date: dateDepense,
+      p_tiers: fournisseur.trim(),
+      p_categorie: categorie.id,
+      p_montant_ttc: montants.ttc,
+      p_taux_tva: tauxTva,
+      p_objet: libelle.trim() || null,
+      p_notes: notes.trim() || null,
+    });
 
     if (error) { setErreur(`Modification impossible : ${error.message}`); setEnCours(false); return; }
 
     for (const f of nouveauxFichiers) {
       const chemin = `${depense.id}/${Date.now()}-${f.name}`;
       const { error: eUp } = await supabase.storage.from('justificatifs').upload(chemin, f);
-      if (eUp) continue;
-      await supabase.from('justificatifs').insert({
-        depense_id: depense.id, chemin, nom_original: f.name,
-        type_mime: f.type, taille_octets: f.size, cree_par: user?.id ?? null,
+      // L'échec devait être visible : passer au fichier suivant en silence
+      // laissait l'objet dans le stockage sans qu'aucune ligne ne le rattache.
+      if (eUp) { setErreur(`Dépôt impossible : ${eUp.message}`); continue; }
+
+      const { error: eJust } = await supabase.rpc('rattacher_justificatif', {
+        p_piece: depense.id, p_chemin: chemin, p_nom: f.name,
+        p_type: f.type, p_taille: f.size,
       });
+      if (eJust) setErreur(`Justificatif non enregistré : ${eJust.message}`);
     }
 
     // Avant / après champ par champ : c'est ce qui rend une correction
@@ -163,12 +164,12 @@ export default function DetailDepense({
     setEnCours(true);
     setErreur(null);
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase.from('depenses').update({
-      statut, valide_par: user?.id ?? null,
-      valide_le: new Date().toISOString(), motif_rejet: motif,
-    }).eq('id', depense.id);
-    if (error) { setErreur(error.message); setEnCours(false); return; }
+    // `valider_piece` attribue le numéro de pièce et journalise, ce que
+    // l'écriture directe ne faisait pas.
+    const { error } = statut === 'validee'
+      ? await supabase.rpc('valider_piece', { p_id: depense.id })
+      : await supabase.rpc('rejeter_piece', { p_id: depense.id, p_motif: motif ?? '' });
+    if (error) { setErreur(`Enregistrement impossible : ${error.message}`); setEnCours(false); return; }
     await supabase.rpc('journaliser', {
       p_action: statut === 'validee' ? 'validation' : 'rejet',
       p_table: 'depenses', p_id: depense.id,
@@ -243,7 +244,9 @@ export default function DetailDepense({
       await supabase.storage.from('justificatifs').remove([f.chemin]);
     }
 
-    const { error } = await supabase.from('depenses').delete().eq('id', depense.id);
+    // Seul un brouillon jamais numéroté se supprime. Tout le reste
+    // s'annule : la numérotation ne se rompt jamais.
+    const { error } = await supabase.rpc('supprimer_brouillon', { p_id: depense.id });
     if (error) { setErreur(`Suppression impossible : ${error.message}`); setEnCours(false); return; }
     router.push('/depenses');
     router.refresh();
@@ -256,7 +259,7 @@ export default function DetailDepense({
     const supabase = createClient();
 
     await supabase.storage.from('justificatifs').remove([f.chemin]);
-    const { error } = await supabase.from('justificatifs').delete().eq('id', f.id);
+    const { error } = await supabase.rpc('retirer_justificatif', { p_justificatif: f.id });
 
     if (error) { setErreur(`Retrait impossible : ${error.message}`); setEnCours(false); return; }
 

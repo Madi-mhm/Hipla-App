@@ -265,6 +265,33 @@ export default function Exports({
 
   return (
     <>
+      {/* ---------- Fichier des écritures comptables ---------- */}
+      {/*
+        Placé en tête parce que c'est le seul export réglementaire : les
+        autres sont des commodités, celui-ci est exigible en contrôle.
+      */}
+      <div className="card" style={{ marginBottom: '1.25rem', borderLeft: '3px solid var(--navy)' }}>
+        <p className="card__title">Fichier des écritures comptables</p>
+        <p style={{ fontSize: 'var(--fs-sm)', lineHeight: 1.55, maxWidth: '70ch' }}>
+          Le <strong>FEC</strong> est le premier document qu&apos;un vérificateur
+          réclame. Dix-huit champs imposés, en partie double, équilibrés au
+          centime — l&apos;export refuse de produire un fichier qui ne le serait
+          pas.
+        </p>
+        <p className="muted" style={{
+          fontSize: 'var(--fs-sm)', marginTop: '.5rem', lineHeight: 1.55, maxWidth: '70ch',
+        }}>
+          Il couvre l&apos;exercice en cours et porte le nom réglementaire
+          — numéro SIREN, mention FEC, date de clôture. Un nom fantaisiste
+          suffit à faire rejeter la remise.
+        </p>
+        <div style={{ marginTop: '.9rem' }}>
+          <a href="/api/fec" className="btn btn--gold">
+            Télécharger le FEC de l&apos;exercice
+          </a>
+        </div>
+      </div>
+
       <div className="card" style={{ marginBottom: '1.25rem' }}>
         <p className="card__title">Jeu de données</p>
         <div className={styles.onglets}>

@@ -20,7 +20,6 @@ import {
 } from '@/lib/comptabilite';
 import { money } from '@/lib/format';
 import type { Categorie } from '@/lib/types';
-import { detailsCreation } from '@/lib/audit';
 import Dialogue from '@/components/Dialogue';
 import Alerte from '@/components/Alerte';
 import styles from './formulaire.module.css';
@@ -116,36 +115,31 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setErreur('Session expirée.'); setEnCours(false); return; }
 
-    const { data: depense, error } = await supabase
-      .from('depenses')
-      .insert({
-        date_depense: dateDepense,
-        fournisseur: fournisseur.trim(),
-        libelle: libelle.trim() || null,
-        categorie_id: categorie.id,
-        montant_ht: montants.ht,
-        taux_tva: tauxTva,
-        montant_tva: montants.tva,
-        montant_ttc: montants.ttc,
-        taux_deductibilite: categorie.taux_deductibilite,
-        compte: categorie.compte,
-        tva_deductible: tvaRec,
-        moyen_paiement: moyenPaiement,
-        paye_par: payePar,
-        notes: notes.trim() || null,
-        statut: peutValider ? 'validee' : 'en_attente',
-        cree_par: user.id,
-        valide_par: peutValider ? user.id : null,
-        valide_le: peutValider ? new Date().toISOString() : null,
-      })
-      .select('id, numero_piece')
-      .single();
+    // Les règles communes — TVA déductible, numéro de pièce, recherche
+    // d'une opération bancaire, journalisation — vivent dans la fonction
+    // en base. Les cinq écrans de création l'appellent, ce qui garantit
+    // qu'un même achat produit la même écriture quel que soit le chemin.
+    const { data: res, error } = await supabase.rpc('creer_depense', {
+      p_date: dateDepense,
+      p_fournisseur: fournisseur.trim(),
+      p_categorie: categorie.id,
+      p_montant_ttc: montants.ttc,
+      p_taux_tva: tauxTva,
+      p_libelle: libelle.trim() || null,
+      p_statut: peutValider ? 'validee' : 'en_attente',
+      p_origine: 'saisie',
+      p_moyen_paiement: moyenPaiement,
+      p_paye_par: payePar,
+      p_notes: notes.trim() || null,
+    });
 
-    if (error || !depense) {
+    if (error || !res) {
       setErreur(`Enregistrement impossible : ${error?.message ?? 'erreur inconnue'}`);
       setEnCours(false);
       return;
     }
+
+    const depense = res as { id: string; numero_piece: string };
 
     for (const f of fichiers) {
       const chemin = `${depense.id}/${Date.now()}-${f.name}`;
@@ -159,42 +153,6 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
         type_mime: f.type,
         taille_octets: f.size,
         cree_par: user.id,
-      });
-    }
-
-    await supabase.rpc('journaliser', {
-      p_action: 'creation',
-      p_table: 'depenses',
-      p_id: depense.id,
-      p_details: detailsCreation(
-        {
-          date_depense: dateDepense,
-          fournisseur: fournisseur.trim(),
-          libelle: libelle.trim() || null,
-          categorie: categorie.libelle,
-          compte: categorie.compte,
-          montant_ht: montants.ht,
-          taux_tva: tauxTva,
-          montant_tva: montants.tva,
-          montant_ttc: montants.ttc,
-          tva_deductible: tvaRec,
-          moyen_paiement: moyenPaiement,
-          paye_par: payePar,
-          numero_piece: depense.numero_piece,
-          statut: peutValider ? 'validee' : 'en_attente',
-          justificatifs: fichiers.length,
-        },
-        `${depense.numero_piece ?? ''} · ${fournisseur.trim()} — ${montants.ttc.toFixed(2).replace('.', ',')} € TTC`
-      ),
-    });
-
-    // Recherche immédiate d'une opération bancaire correspondante.
-    const { data: corr } = await supabase.rpc('chercher_transaction', { p_depense: depense.id });
-    const trouve = (corr as { resultat?: string } | null)?.resultat;
-    if (trouve === 'correspondance_forte' || trouve === 'correspondance_probable') {
-      await supabase.rpc('proposer_rapprochement', {
-        p_depense: depense.id,
-        p_transaction: (corr as { transaction_id: string }).transaction_id,
       });
     }
 

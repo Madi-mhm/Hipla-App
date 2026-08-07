@@ -191,7 +191,8 @@ export async function construireActions(
   // ================================================================
 
   const [vehicules, frais, sauvegardes, commentaires, echeancesAbo, abosEngages,
-         transactionsATraiter, synchroQonto, rapprochementsProposes] = await Promise.all([
+         transactionsATraiter, synchroQonto, rapprochementsProposes,
+         justificatifsQonto] = await Promise.all([
     supabase.from('vehicules').select('id, libelle, date_ct').eq('actif', true),
     supabase.from('frais_creation').select('id, statut_reprise, montant_ttc'),
     supabase.from('sauvegardes').select('demarree_le, statut')
@@ -216,7 +217,22 @@ export async function construireActions(
     supabase.from('depenses')
       .select('id, numero_piece, fournisseur, montant_ttc')
       .eq('statut_rapprochement', 'propose'),
+    supabase.from('v_justificatifs_qonto').select('id, contrepartie, montant'),
   ]);
+
+  // ---- IMPORTANT : justificatifs déposés dans Qonto ----
+  const justifsQonto = justificatifsQonto.data ?? [];
+  if (justifsQonto.length > 0) {
+    actions.push({
+      id: 'justificatifs-qonto',
+      urgence: 'important',
+      titre: `${justifsQonto.length} justificatif${justifsQonto.length > 1 ? 's' : ''} déposé${justifsQonto.length > 1 ? 's' : ''} dans Qonto`,
+      detail: "Ces pièces attendent d'être transformées en écritures.",
+      href: '/banque/justificatifs',
+      libelleLien: 'Traiter',
+      compte: justifsQonto.length,
+    });
+  }
 
   // ---- IMPORTANT : rapprochements proposés ----
   // Le montant vient de la banque, mais le lien entre l'opération et

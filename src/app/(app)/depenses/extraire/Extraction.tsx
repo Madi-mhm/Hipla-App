@@ -20,7 +20,6 @@ import { createClient } from '@/lib/supabase/client';
 import { compresser, poids } from '@/lib/compression';
 import { depuisTTC, tvaRecuperable, montantsCoherents, TAUX_TVA } from '@/lib/comptabilite';
 import { money, date } from '@/lib/format';
-import { detailsCreation } from '@/lib/audit';
 import Alerte from '@/components/Alerte';
 import type { Categorie } from '@/lib/types';
 import styles from './extraction.module.css';
@@ -206,35 +205,43 @@ export default function Extraction({
     const tvaRec = tvaRecuperable(m.tva, cat.taux_deductibilite);
     const statut = valider && peutValider ? 'validee' : 'en_attente';
 
-    const { data: dep, error } = await supabase.from('depenses').insert({
-      date_depense: doc.dateDepense,
-      fournisseur: (doc.fournisseur ?? '').trim(),
-      libelle: doc.description?.trim() || doc.extrait?.description || doc.extrait?.lignes?.[0]?.libelle || null,
-      categorie_id: cat.id,
-      montant_ht: m.ht,
-      taux_tva: doc.tauxTva ?? 20,
-      montant_tva: m.tva,
-      montant_ttc: m.ttc,
-      taux_deductibilite: cat.taux_deductibilite,
-      compte: cat.compte,
-      tva_deductible: tvaRec,
-      moyen_paiement: doc.extrait?.mode_paiement ?? 'carte',
-      paye_par: 'societe',
-      numero_facture_fournisseur: doc.numeroFacture || null,
-      siret_fournisseur: doc.extrait?.siret_fournisseur ?? null,
-      tva_fournisseur: doc.extrait?.tva_fournisseur ?? null,
-      extrait_par_ia: true,
-      confiance_extraction: doc.extrait?.confiance ?? null,
-      statut,
-      cree_par: utilisateurId,
-      valide_par: statut === 'validee' ? utilisateurId : null,
-      valide_le: statut === 'validee' ? new Date().toISOString() : null,
-      notes: doc.extrait?.remarques ?? null,
-    }).select('id, numero_piece').single();
+    const { data: res, error } = await supabase.rpc('creer_depense', {
+      p_date: doc.dateDepense,
+      p_fournisseur: (doc.fournisseur ?? '').trim(),
+      p_categorie: cat.id,
+      p_montant_ttc: m.ttc,
+      p_taux_tva: doc.tauxTva ?? 20,
+      p_libelle: doc.description?.trim() || doc.extrait?.description
+                 || doc.extrait?.lignes?.[0]?.libelle || null,
+      p_statut: statut,
+      p_origine: 'extraction_ia',
+      p_numero_facture: doc.numeroFacture || null,
+      p_moyen_paiement: doc.extrait?.mode_paiement ?? 'carte',
+      p_notes: doc.extrait?.remarques ?? null,
+      p_extrait_ia: true,
+      p_confiance: doc.extrait?.confiance ?? null,
+      // Les deux faits qui déterminent le régime de TVA. L'IA les lisait
+      // déjà sur la facture, mais ils s'arrêtaient ici : une facture
+      // étrangère sans taxe était classée « exonérée » au lieu
+      // d'« autoliquidation », perdant les deux lignes de déclaration.
+      p_tva_facturee: doc.extrait?.montant_tva ?? null,
+      p_tva_intracom: doc.extrait?.tva_fournisseur ?? null,
+    });
 
-    if (error || !dep) {
+    if (error || !res) {
       majDoc(doc.id, { erreur: `Enregistrement impossible : ${error?.message}` });
       return;
+    }
+
+    const dep = res as { id: string; numero_piece: string; rapprochement_propose?: string };
+
+    // Le SIRET et le numéro de TVA du fournisseur ne sont pas des
+    // paramètres de la fonction : ils complètent l'écriture après coup.
+    if (doc.extrait?.siret_fournisseur || doc.extrait?.tva_fournisseur) {
+      await supabase.from('depenses').update({
+        siret_fournisseur: doc.extrait?.siret_fournisseur ?? null,
+        tva_fournisseur: doc.extrait?.tva_fournisseur ?? null,
+      }).eq('id', dep.id);
     }
 
     // Le justificatif est déjà en main : on le joint sans repasser par l'utilisateur.
@@ -252,47 +259,12 @@ export default function Extraction({
       });
     }
 
-    // Mémorise le rattachement : la prochaine facture de ce fournisseur
-    // sera proposée dans la bonne catégorie.
-    await supabase.rpc('memoriser_fournisseur', {
-      p_fournisseur: (doc.fournisseur ?? '').trim(),
-      p_categorie: cat.id,
-      p_siret: doc.extrait?.siret_fournisseur ?? null,
-      p_tva: doc.extrait?.tva_fournisseur ?? null,
-    });
-
-    await supabase.rpc('journaliser', {
-      p_action: 'creation', p_table: 'depenses', p_id: dep.id,
-      p_details: detailsCreation({
-        numero_piece: dep.numero_piece,
-        fournisseur: doc.fournisseur,
-        numero_facture: doc.numeroFacture || null,
-        date_depense: doc.dateDepense,
-        categorie: cat.libelle,
-        montant_ht: m.ht, montant_tva: m.tva, montant_ttc: m.ttc,
-        statut,
-        extrait_par_ia: true,
-        confiance: doc.extrait?.confiance ?? null,
-      }, `${dep.numero_piece} · ${doc.fournisseur} — ${m.ttc.toFixed(2).replace('.', ',')} € TTC`),
-    });
-
-    // Cherche une opération bancaire correspondante : si elle existe, le
-    // rapprochement est proposé sans attendre la synchronisation suivante.
-    const { data: corr } = await supabase.rpc('chercher_transaction', { p_depense: dep.id });
-    const trouve = (corr as { resultat?: string } | null)?.resultat;
-    if (trouve === 'correspondance_forte' || trouve === 'correspondance_probable') {
-      await supabase.rpc('proposer_rapprochement', {
-        p_depense: dep.id,
-        p_transaction: (corr as { transaction_id: string }).transaction_id,
-      });
-    }
-
     majDoc(doc.id, { etat: 'enregistre', numeroPiece: dep.numero_piece ?? undefined, erreur: undefined });
     setSucces(
       (statut === 'validee'
         ? `${dep.numero_piece} enregistrée et validée.`
         : `${dep.numero_piece} enregistrée. Elle attend votre vérification.`)
-      + (trouve && trouve.startsWith('correspondance')
+      + (dep.rapprochement_propose?.startsWith('correspondance')
         ? ' Une opération bancaire correspondante a été trouvée : à confirmer.'
         : '')
     );

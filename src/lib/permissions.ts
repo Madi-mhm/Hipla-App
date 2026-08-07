@@ -12,7 +12,8 @@ export type Role = 'proprietaire' | 'contributeur' | 'comptable' | 'salarie';
 export type Module =
   | 'entreprise' | 'utilisateurs' | 'depenses' | 'ventes' | 'abonnements'
   | 'banque' | 'tva' | 'echeances' | 'documents' | 'exports' | 'audit'
-  | 'commentaires' | 'taches' | 'audit_comptable';
+  | 'commentaires' | 'taches' | 'audit_comptable'
+  | 'clients' | 'prestations';
 
 export type Action =
   | 'read' | 'create' | 'update' | 'delete'
@@ -24,6 +25,8 @@ const DROITS: Record<Role, Partial<Record<Module, Action[]>>> = {
     utilisateurs: ['read', 'create', 'update', 'delete'],
     depenses: ['read', 'create', 'update', 'delete', 'validate', 'revue'],
     ventes: ['read', 'create', 'update', 'delete', 'validate'],
+    clients: ['read', 'create', 'update', 'delete'],
+    prestations: ['read', 'create', 'update', 'delete'],
     abonnements: ['read', 'create', 'update', 'delete'],
     banque: ['read', 'update'],
     tva: ['read', 'validate'],
@@ -39,6 +42,8 @@ const DROITS: Record<Role, Partial<Record<Module, Action[]>>> = {
     entreprise: ['read'],
     depenses: ['read', 'create'],   // saisie autorisée, validation non
     ventes: ['read'],
+    clients: ['read'],
+    prestations: ['read'],
     abonnements: ['read'],
     banque: ['read'],
     tva: ['read'],
@@ -55,6 +60,8 @@ const DROITS: Record<Role, Partial<Record<Module, Action[]>>> = {
     entreprise: ['read'],
     depenses: ['read', 'revue'],
     ventes: ['read'],
+    clients: ['read'],
+    prestations: ['read'],
     abonnements: ['read'],
     banque: ['read'],
     tva: ['read'],

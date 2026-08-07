@@ -31,6 +31,10 @@ export default async function Page() {
       supabase.from('categories').select('*').eq('actif', true).order('ordre'),
     ]);
 
+  const { count: justificatifsEnAttente } = await supabase
+    .from('v_justificatifs_qonto')
+    .select('*', { count: 'exact', head: true });
+
   return (
     <>
       <Header titre="Banque" sousTitre="Opérations Qonto et rapprochement" />
@@ -42,6 +46,7 @@ export default async function Page() {
           categories={(cats ?? []) as Categorie[]}
           utilisateurId={profil.id}
           peutGerer={peut(profil.role, 'banque', 'update')}
+          justificatifsEnAttente={justificatifsEnAttente ?? 0}
         />
       </div>
     </>

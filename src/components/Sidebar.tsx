@@ -30,11 +30,12 @@ const NAVIGATION: Groupe[] = [
   {
     titre: 'Pilotage',
     entrees: [
-      { libelle: "Centre d'action", href: '/', disponible: true },
+      { libelle: 'Séance hebdomadaire', href: '/seance', disponible: true },
+      { libelle: 'Journal comptable', href: '/exports/journal', disponible: true, module: 'exports' },
       { libelle: 'Espace comptable', href: '/comptable', disponible: true, module: 'exports', action: 'export' },
       { libelle: 'Tâches', href: '/taches', disponible: true, module: 'taches' },
       { libelle: 'Recherche', href: '/recherche', disponible: true, module: 'depenses' },
-      { libelle: 'Tableau de bord', href: '/tableau-de-bord', disponible: false, ronde: 11 },
+      { libelle: 'Tableau de bord', href: '/tableau-de-bord', disponible: true },
     ],
   },
   {
@@ -45,8 +46,9 @@ const NAVIGATION: Groupe[] = [
       { libelle: 'Frais de création', href: '/frais-creation', disponible: true, module: 'depenses' },
       { libelle: 'Abonnements', href: '/abonnements', disponible: true, module: 'abonnements' },
       { libelle: 'Banque', href: '/banque', disponible: true, module: 'banque' },
-      { libelle: 'Ventes', href: '/ventes', disponible: false, ronde: 8, module: 'ventes' },
-      { libelle: 'TVA', href: '/tva', disponible: false, ronde: 9, module: 'tva' },
+      { libelle: 'Ventes', href: '/ventes', disponible: true, module: 'ventes' },
+      { libelle: 'Clients', href: '/clients', disponible: true, module: 'clients' },
+      { libelle: 'TVA', href: '/tva', disponible: true, module: 'depenses' },
       { libelle: 'Échéances', href: '/echeances', disponible: false, ronde: 10, module: 'echeances' },
       { libelle: 'Immobilisations', href: '/immobilisations', disponible: false, ronde: 13, module: 'depenses' },
       { libelle: 'Comptes associés', href: '/associes', disponible: false, ronde: 13, module: 'depenses' },
@@ -65,6 +67,8 @@ const NAVIGATION: Groupe[] = [
     entrees: [
       { libelle: 'Entreprise', href: '/reglages/entreprise', disponible: true, module: 'entreprise' },
       { libelle: 'Catégories', href: '/reglages/categories', disponible: true, module: 'depenses' },
+      { libelle: "Règles d'appariement", href: '/reglages/regles', disponible: true, module: 'banque' },
+      { libelle: 'Prestations', href: '/reglages/prestations', disponible: true, module: 'prestations' },
       { libelle: 'Véhicules', href: '/reglages/vehicules', disponible: true, module: 'depenses' },
       { libelle: 'Utilisateurs', href: '/reglages/utilisateurs', disponible: true, module: 'utilisateurs' },
       { libelle: "Journal d'audit", href: '/reglages/audit', disponible: true, module: 'audit_comptable' },

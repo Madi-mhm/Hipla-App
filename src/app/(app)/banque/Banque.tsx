@@ -16,8 +16,8 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { compresser, poids } from '@/lib/compression';
 import { money, date, dateLong, daysUntil } from '@/lib/format';
-import { depuisTTC, tvaRecuperable } from '@/lib/comptabilite';
 import Dialogue from '@/components/Dialogue';
 import Alerte from '@/components/Alerte';
 import {
@@ -44,10 +44,12 @@ type Props = {
   categories: Categorie[];
   utilisateurId: string;
   peutGerer: boolean;
+  justificatifsEnAttente: number;
 };
 
 export default function Banque({
   transactions, synchronisations, controle, categories, utilisateurId, peutGerer,
+  justificatifsEnAttente,
 }: Props) {
   const router = useRouter();
   const [enCours, setEnCours] = useState(false);
@@ -57,6 +59,7 @@ export default function Banque({
   const [aEcarter, setAEcarter] = useState<TransactionQonto | null>(null);
   const [aCreer, setACreer] = useState<TransactionQonto | null>(null);
   const [categorieCreation, setCategorieCreation] = useState('');
+  const [pieceCreation, setPieceCreation] = useState<File | null>(null);
 
   const derniere = synchronisations.find((s) => s.statut === 'reussie');
   const soldeBanque = derniere?.solde_qonto != null ? Number(derniere.solde_qonto) : null;
@@ -137,48 +140,37 @@ export default function Banque({
    * donc il est certain ; la dépense arrive néanmoins en attente, car
    * l'affectation comptable, elle, reste une interprétation.
    */
-  async function creerDepense(t: TransactionQonto, categorieId: string) {
+  async function creerDepense(t: TransactionQonto, categorieId: string, piece: File | null) {
     const cat = categories.find((c) => c.id === categorieId);
     if (!cat) { setErreur('Choisissez une catégorie.'); return; }
 
     setEnCours(true);
     const supabase = createClient();
-    const m = depuisTTC(Number(t.montant), Number(cat.taux_tva_defaut));
 
-    const { data: dep, error } = await supabase.from('depenses').insert({
-      date_depense: t.date_operation,
-      fournisseur: t.contrepartie ?? t.libelle,
-      libelle: t.libelle,
-      categorie_id: cat.id,
-      montant_ht: m.ht,
-      taux_tva: cat.taux_tva_defaut,
-      montant_tva: m.tva,
-      montant_ttc: m.ttc,
-      taux_deductibilite: cat.taux_deductibilite,
-      compte: cat.compte,
-      tva_deductible: tvaRecuperable(m.tva, cat.taux_deductibilite),
-      moyen_paiement: 'carte',
-      paye_par: 'societe',
-      transaction_qonto_id: t.id,
-      paye_le: t.date_operation,
-      statut: 'en_attente',
-      cree_par: utilisateurId,
-      notes: 'Créée depuis une opération bancaire. Justificatif à joindre.',
-    }).select('id, numero_piece').single();
+    // La fonction en base porte les règles communes : calcul de la TVA
+    // déductible, numéro de pièce, statut de rapprochement, journalisation.
+    // L'opération étant désignée explicitement, le lien est certain et le
+    // rapprochement naît confirmé.
+    const { data: res, error } = await supabase.rpc('creer_depense', {
+      p_date: t.date_operation,
+      p_fournisseur: t.contrepartie ?? t.libelle,
+      p_categorie: cat.id,
+      p_montant_ttc: Number(t.montant),
+      p_libelle: t.libelle,
+      p_statut: 'en_attente',
+      p_origine: 'banque',
+      p_transaction: t.id,
+      p_moyen_paiement: 'carte',
+      p_notes: 'Créée depuis une opération bancaire. Justificatif à joindre.',
+    });
 
-    if (error || !dep) {
+    if (error || !res) {
       setErreur(`Création impossible : ${error?.message}`);
       setEnCours(false);
       return;
     }
 
-    await supabase.from('transactions_qonto').update({
-      statut_traitement: 'rattachee',
-      depense_id: dep.id,
-      rattachement_auto: false,
-      rattache_par: utilisateurId,
-      rattache_le: new Date().toISOString(),
-    }).eq('id', t.id);
+    const dep = res as { id: string; numero_piece: string };
 
     // Mémorise le libellé : au troisième rattachement identique, le
     // rapprochement deviendra automatique.
@@ -188,15 +180,28 @@ export default function Banque({
       p_categorie: cat.id,
     });
 
-    await supabase.rpc('journaliser', {
-      p_action: 'creation', p_table: 'depenses', p_id: dep.id,
-      p_details: {
-        resume: `${dep.numero_piece} créée depuis ${t.numero_piece}`,
-        montant_ttc: m.ttc, categorie: cat.libelle,
-      },
-    });
+    // Le justificatif est joint dans le même geste : revenir plus tard
+    // sur la dépense pour l'ajouter est une étape de trop.
+    if (piece) {
+      const chemin = `${dep.id}/${Date.now()}-${piece.name}`;
+      const { error: eUp } = await supabase.storage
+        .from('justificatifs').upload(chemin, piece);
+      if (!eUp) {
+        await supabase.from('justificatifs').insert({
+          depense_id: dep.id,
+          chemin,
+          nom_original: piece.name,
+          type_mime: piece.type,
+          taille_octets: piece.size,
+          cree_par: utilisateurId,
+        });
+      }
+    }
 
-    setSucces(`${dep.numero_piece} créée en attente. Joignez le justificatif.`);
+    setSucces(
+      `${dep.numero_piece} créée en attente et rapprochée.` +
+      (piece ? ' Justificatif joint.' : ' Pensez à joindre le justificatif.')
+    );
     setEnCours(false);
     router.refresh();
   }
@@ -345,6 +350,23 @@ export default function Banque({
         )}
       </div>
 
+      {justificatifsEnAttente > 0 && (
+        <div className="card" style={{ marginBottom: '1.25rem', borderLeft: '3px solid var(--info)' }}>
+          <p className="card__title">
+            {justificatifsEnAttente} justificatif{justificatifsEnAttente > 1 ? 's' : ''} déposé
+            {justificatifsEnAttente > 1 ? 's' : ''} dans Qonto
+          </p>
+          <p style={{ fontSize: 'var(--fs-sm)', lineHeight: 1.55, maxWidth: '66ch' }}>
+            Ces pièces attendent d'être rattachées à une écriture. Celles qui
+            correspondent à une dépense déjà enregistrée y ont été rattachées
+            automatiquement ; les autres demandent une lecture.
+          </p>
+          <Link href="/banque/justificatifs" className="btn btn--gold" style={{ marginTop: '.9rem' }}>
+            Traiter les justificatifs
+          </Link>
+        </div>
+      )}
+
       {erreur && <Alerte type="erreur" message={erreur} onFermer={() => setErreur(null)} />}
       {succes && <Alerte type="succes" message={succes} onFermer={() => setSucces(null)} />}
 
@@ -403,9 +425,13 @@ export default function Banque({
                     opacity: t.statut_traitement === 'ecartee' ? 0.5 : 1,
                   }}>
                     <td style={td} className="mono">
-                      <span style={{ fontSize: '.72rem', color: 'var(--g-600)' }}>
-                        {t.numero_piece ?? '—'}
-                      </span>
+                      {/* Sans ce lien, le détail d'une opération — son
+                          identifiant Qonto, son justificatif, ses candidats
+                          au rapprochement — restait inaccessible. */}
+                      <Link href={`/banque/${t.id}`}
+                        style={{ fontSize: '.72rem', color: 'var(--navy)', fontWeight: 600 }}>
+                        {t.numero_piece ?? 'Ouvrir'}
+                      </Link>
                     </td>
                     <td style={td}>{date(t.date_operation)}</td>
                     <td style={{ ...td, fontWeight: 500 }}>
@@ -448,13 +474,18 @@ export default function Banque({
                       <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                         {t.statut_traitement === 'a_traiter' && t.statut_qonto === 'completed' && (
                           <span style={{ display: 'inline-flex', gap: '.3rem' }}>
-                            {t.sens === 'debit' && (
-                              <button onClick={() => { setACreer(t); setCategorieCreation(''); }}
-                                className="btn btn--ghost"
-                                style={{ minHeight: 26, padding: '.1rem .55rem', fontSize: '.7rem' }}>
-                                Créer
-                              </button>
-                            )}
+                            {/*
+                              Le dialogue rapide ne proposait ni taux ni régime
+                              de TVA : sur une facture étrangère, il produisait
+                              silencieusement une écriture exonérée là où
+                              l'autoliquidation s'imposait. Un chemin qui
+                              fabrique des écritures fausses ne doit pas être le
+                              plus accessible — on conduit à l'écran complet.
+                            */}
+                            <Link href={`/banque/${t.id}`} className="btn btn--ghost"
+                              style={{ minHeight: 26, padding: '.1rem .55rem', fontSize: '.7rem' }}>
+                              Affecter
+                            </Link>
                             <button onClick={() => setAEcarter(t)} className="btn btn--ghost"
                               style={{ minHeight: 26, padding: '.1rem .55rem', fontSize: '.7rem', color: 'var(--g-500)' }}>
                               Écarter
@@ -569,14 +600,36 @@ export default function Banque({
               </select>
             </label>
 
+            <label className={styles.champDialogue}>
+              <span>Justificatif (facultatif)</span>
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) { setPieceCreation(null); return; }
+                  const r = await compresser(f);
+                  setPieceCreation(r.fichier);
+                }}
+              />
+              {pieceCreation && (
+                <span className="muted" style={{ textTransform: 'none', letterSpacing: 0, fontFamily: 'var(--body)', fontWeight: 400 }}>
+                  {pieceCreation.name} · {poids(pieceCreation.size)}
+                </span>
+              )}
+            </label>
+
             <div className={styles.actionsDialogue}>
-              <button onClick={() => setACreer(null)} className="btn btn--ghost">Annuler</button>
+              <button onClick={() => { setACreer(null); setPieceCreation(null); }}
+                className="btn btn--ghost">Annuler</button>
               <button
                 onClick={() => {
                   const t = aCreer;
                   const c = categorieCreation;
+                  const p = pieceCreation;
                   setACreer(null);
-                  if (t && c) creerDepense(t, c);
+                  setPieceCreation(null);
+                  if (t && c) creerDepense(t, c, p);
                 }}
                 disabled={!categorieCreation || enCours}
                 className="btn btn--gold"

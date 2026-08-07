@@ -2,8 +2,15 @@
 
 /**
  * Validation ou rejet d'une saisie, depuis une liste.
- * La sécurité réelle vient des politiques RLS : un contributeur qui
- * appellerait cette action verrait sa requête refusée par la base.
+ *
+ * Les dépenses passent désormais par les fonctions du registre :
+ * `valider_piece` attribue le numéro de pièce et journalise, ce que
+ * l'écriture directe ne faisait pas. Les déplacements, non encore
+ * basculés, conservent l'ancien chemin.
+ *
+ * La sécurité réelle vient des politiques RLS et des contrôles en
+ * base : un contributeur qui appellerait ces fonctions verrait sa
+ * requête refusée.
  */
 
 import { useState } from 'react';
@@ -27,10 +34,26 @@ export default function ActionsValidation({
   async function appliquer(statut: 'validee' | 'rejetee', motif: string | null) {
     setEnCours(true);
     setErreur(null);
-
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
 
+    if (table === 'depenses') {
+      const { error } = statut === 'validee'
+        ? await supabase.rpc('valider_piece', { p_id: id })
+        : await supabase.rpc('rejeter_piece', { p_id: id, p_motif: motif ?? '' });
+
+      if (error) {
+        setErreur(`Enregistrement impossible : ${error.message}`);
+        setEnCours(false);
+        return;
+      }
+
+      setEnCours(false);
+      router.refresh();
+      return;
+    }
+
+    // Déplacements : encore sur l'ancienne table.
+    const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase
       .from(table)
       .update({

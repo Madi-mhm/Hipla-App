@@ -186,48 +186,43 @@ export default function ListeAbonnements({
     setErreur(null);
     const supabase = createClient();
 
-    const { data: dep, error } = await supabase.from('depenses').insert({
-      date_depense: e.date_prevue,
-      fournisseur: abo.fournisseur,
-      libelle: `${abo.nom} — ${e.periode}`,
-      categorie_id: abo.categorie_id,
-      montant_ht: abo.montant_ht,
-      taux_tva: abo.taux_tva,
-      montant_tva: abo.montant_tva,
-      montant_ttc: abo.montant_ttc,
-      taux_deductibilite: 100,
-      compte: '6226',
-      tva_deductible: abo.montant_tva,
-      moyen_paiement: abo.mode_paiement ?? 'carte',
-      paye_par: 'societe',
-      statut: 'validee',
-      cree_par: utilisateurId,
-      valide_par: utilisateurId,
-      valide_le: new Date().toISOString(),
-      notes: abo.autoliquidation
+    const { data: res, error } = await supabase.rpc('creer_depense', {
+      p_date: e.date_prevue,
+      p_fournisseur: abo.fournisseur,
+      p_categorie: abo.categorie_id,
+      p_montant_ttc: Number(abo.montant_ttc),
+      p_taux_tva: Number(abo.taux_tva),
+      p_libelle: `${abo.nom} — ${e.periode}`,
+      p_statut: 'validee',
+      p_origine: 'abonnement',
+      p_moyen_paiement: abo.mode_paiement ?? 'carte',
+      p_notes: abo.autoliquidation
         ? 'TVA autoliquidée : déclarer en collectée et en déductible.'
         : null,
-    }).select('id, numero_piece').single();
+    });
 
-    if (error) { setErreur(`Constatation impossible : ${error.message}`); setEnCours(false); return; }
+    if (error || !res) {
+      setErreur(`Constatation impossible : ${error?.message}`);
+      setEnCours(false);
+      return;
+    }
+
+    const dep = res as { id: string; numero_piece: string; rapprochement_propose?: string };
 
     await supabase.from('abonnement_echeances').update({
       statut: 'payee',
       date_constatee: new Date().toISOString().slice(0, 10),
       montant_reel: abo.montant_ttc,
-      depense_id: dep?.id,
+      depense_id: dep.id,
     }).eq('id', e.id);
 
-    await supabase.rpc('journaliser', {
-      p_action: 'creation', p_table: 'depenses', p_id: dep?.id ?? null,
-      p_details: {
-        resume: `${dep?.numero_piece ?? ''} · ${abo.nom} ${e.periode} constaté`,
-        abonnement: abo.numero_piece,
-        montant_ttc: abo.montant_ttc,
-      },
-    });
-
-    setSucces(`Dépense ${dep?.numero_piece ?? ''} créée. Pensez à joindre le justificatif.`);
+    setSucces(
+      `Dépense ${dep.numero_piece} créée. ` +
+      (dep.rapprochement_propose?.startsWith('correspondance')
+        ? 'Une opération bancaire correspondante a été trouvée : à confirmer. '
+        : '') +
+      'Pensez à joindre le justificatif.'
+    );
     setEnCours(false);
     router.refresh();
   }
@@ -506,10 +501,13 @@ export default function ListeAbonnements({
           if (!Number.isFinite(v) || v <= 0) { setErreur('Montant invalide.'); return; }
 
           setEnCours(true);
-          const m = depuisTTC(v, 20);
+          // Le taux déjà déclaré sur l'abonnement prime : un outil facturé
+          // à 10 % ne doit pas basculer à 20 % en passant au payant.
+          const taux = Number(a.taux_tva) || 20;
+          const m = depuisTTC(v, taux);
           const supabase = createClient();
           const { error } = await supabase.from('abonnements').update({
-            montant_ht: m.ht, taux_tva: 20, montant_tva: m.tva, montant_ttc: m.ttc,
+            montant_ht: m.ht, taux_tva: taux, montant_tva: m.tva, montant_ttc: m.ttc,
             statut: 'actif', date_debut: new Date().toISOString().slice(0, 10),
             modifie_le: new Date().toISOString(),
           }).eq('id', a.id);

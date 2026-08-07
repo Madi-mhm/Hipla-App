@@ -58,6 +58,17 @@ Règles :
 - Les montants sont des nombres, jamais des chaînes. Point décimal.
 - Si seul le TTC est lisible et que le taux de TVA est visible, déduis le HT.
 - Si aucune TVA n'apparaît, mets taux_tva à 0 et montant_tva à 0.
+- tva_fournisseur est DÉTERMINANT et il faut le chercher activement : c'est
+  lui qui décide du régime de TVA. Relève-le où qu'il figure — en-tête, pied
+  de page, mentions légales — et recopie-le tel quel, préfixe pays compris
+  (FR, IE, LU, NL…). Un numéro non français sans taxe facturée signifie que
+  l'acheteur autoliquide la TVA.
+- Cherche aussi les mentions « autoliquidation », « reverse charge »,
+  « VAT reverse charged », « Article 196 » ou « self-assessment », et
+  signale-les dans remarques. Elles confirment le régime.
+- Si la facture est libellée dans une autre devise que l'euro, mets devise
+  en conséquence ET signale-le dans remarques : le montant à comptabiliser
+  sera celui du débit bancaire en euros, pas celui de la facture.
 - La date est celle de la facture, pas celle d'impression.
 - confiance reflète ta certitude globale, de 0 à 1. Sois honnête : une
   photo floue ou un ticket froissé doit faire descendre cette valeur.
@@ -69,7 +80,14 @@ Règles :
   complète, une synthèse utilisable six mois plus tard.
 - categorie_suggeree : choisis d'après la NATURE des articles, pas d'après
   la ressemblance du libellé. Des éponges et du papier toilette sont des
-  produits d'entretien, pas des consommables de nettoyage professionnel.`;
+  produits d'entretien, pas des consommables de nettoyage professionnel.
+- Distingue le SERVICE du BIEN, c'est la faute la plus coûteuse. Un
+  abonnement, un hébergement, une licence mensuelle, une prestation
+  récurrente sont des services — jamais du matériel, même lorsque le
+  fournisseur vend par ailleurs de l'équipement. Un abonnement Vercel ou
+  Google n'est pas du matériel informatique.
+- Un achat ponctuel de matériel durable au-delà de 500 € HT est une
+  immobilisation, pas une charge : signale-le dans remarques.`;
 
 export async function POST(request: NextRequest) {
   const debut = Date.now();

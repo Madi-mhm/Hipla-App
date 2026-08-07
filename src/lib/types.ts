@@ -395,3 +395,153 @@ export const CLASSE_RAPPROCHEMENT: Record<string, string> = {
   confirme: 'badge--success',
   sans_objet: 'badge--neutral',
 };
+
+export type Client = {
+  id: string;
+  numero_piece: string | null;
+  type: 'particulier' | 'professionnel' | 'syndic' | 'conciergerie' | 'collectivite';
+  nom: string;
+  contact: string | null;
+  email: string | null;
+  telephone: string | null;
+  adresse: string | null;
+  code_postal: string | null;
+  ville: string | null;
+  pays: string;
+  siret: string | null;
+  tva_intracom: string | null;
+  delai_paiement: number;
+  notes: string | null;
+  actif: boolean;
+  cree_par?: string | null;
+  cree_le?: string;
+  modifie_le?: string;
+};
+
+export type Prestation = {
+  id: string;
+  libelle: string;
+  description: string | null;
+  groupe: string;
+  prix_ht: number;
+  unite: string;
+  taux_tva: number;
+  compte: string;
+  actif: boolean;
+  ordre: number;
+};
+
+export type Facture = {
+  id: string;
+  numero_piece: string | null;
+  client_id: string;
+  devis_id: string | null;
+  nature: 'facture' | 'acompte' | 'solde' | 'avoir';
+  facture_liee_id: string | null;
+  date_emission: string;
+  date_echeance: string;
+  delai_paiement: number;
+  objet: string | null;
+  montant_ht: number;
+  montant_tva: number;
+  montant_ttc: number;
+  acomptes_deduits: number;
+  net_a_payer: number;
+  statut: 'brouillon' | 'emise' | 'encaissee' | 'partielle' | 'impayee' | 'annulee';
+  encaisse_le: string | null;
+  montant_encaisse: number;
+  mode_encaissement: string | null;
+  transaction_qonto_id: string | null;
+  statut_rapprochement: string;
+  relances_envoyees: number;
+  derniere_relance: string | null;
+  motif_annulation: string | null;
+  annule_le: string | null;
+  annule_par: string | null;
+  transaction_proposee_id: string | null;
+  conditions: string | null;
+  notes: string | null;
+  cree_par: string | null;
+  cree_le: string;
+  modifie_le: string;
+  clients?: { nom: string; type: string; email: string | null };
+};
+
+export type Devis = {
+  id: string;
+  numero_piece: string | null;
+  client_id: string;
+  date_emission: string;
+  validite_jours: number;
+  objet: string | null;
+  montant_ht: number;
+  montant_tva: number;
+  montant_ttc: number;
+  statut: 'brouillon' | 'envoye' | 'accepte' | 'refuse' | 'expire' | 'annule';
+  date_reponse: string | null;
+  facture_id: string | null;
+  motif_refus: string | null;
+  conditions: string | null;
+  notes: string | null;
+  cree_par?: string | null;
+  cree_le?: string;
+  modifie_le?: string;
+  clients?: { nom: string };
+};
+
+export type LigneDocument = {
+  id: string;
+  devis_id: string | null;
+  facture_id: string | null;
+  prestation_id: string | null;
+  ordre: number;
+  libelle: string;
+  description: string | null;
+  quantite: number;
+  unite: string | null;
+  prix_unitaire_ht: number;
+  remise_pct: number;
+  taux_tva: number;
+  montant_ht: number;
+  montant_tva: number;
+  montant_ttc: number;
+};
+
+export const LIBELLE_TYPE_CLIENT: Record<string, string> = {
+  particulier: 'Particulier',
+  professionnel: 'Professionnel',
+  syndic: 'Syndic',
+  conciergerie: 'Conciergerie',
+  collectivite: 'Collectivité',
+};
+
+export const LIBELLE_UNITE: Record<string, string> = {
+  forfait: 'forfait', heure: 'heure', m2: 'm²', piece: 'pièce',
+  ouvrant: 'ouvrant', rotation: 'rotation', vehicule: 'véhicule',
+};
+
+export const LIBELLE_STATUT_FACTURE: Record<string, string> = {
+  brouillon: 'Brouillon', emise: 'Émise', encaissee: 'Encaissée',
+  partielle: 'Partiellement encaissée', impayee: 'Impayée', annulee: 'Annulée',
+};
+
+export const CLASSE_STATUT_FACTURE: Record<string, string> = {
+  brouillon: 'badge--neutral', emise: 'badge--info',
+  encaissee: 'badge--success', partielle: 'badge--warning',
+  impayee: 'badge--danger', annulee: 'badge--neutral',
+};
+
+export const LIBELLE_STATUT_DEVIS: Record<string, string> = {
+  brouillon: 'Brouillon', envoye: 'Envoyé', accepte: 'Accepté',
+  refuse: 'Refusé', expire: 'Expiré', annule: 'Annulé',
+};
+
+export const CLASSE_STATUT_DEVIS: Record<string, string> = {
+  brouillon: 'badge--neutral', envoye: 'badge--info',
+  accepte: 'badge--success', refuse: 'badge--danger',
+  expire: 'badge--warning', annule: 'badge--neutral',
+};
+
+export const LIBELLE_NATURE_FACTURE: Record<string, string> = {
+  facture: 'Facture', acompte: 'Acompte', solde: 'Solde', avoir: 'Avoir',
+};

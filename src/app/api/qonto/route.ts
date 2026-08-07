@@ -24,7 +24,10 @@ const BASE = 'https://thirdparty.qonto.com/v2';
 const DEPUIS = '2026-07-01';
 
 type TransactionQonto = {
+  /** Identifiant lisible. Les adresses de l'API ne l'acceptent PAS. */
   transaction_id: string;
+  /** UUID, celui qu'attendent les adresses `/v2/transactions/{id}`. */
+  id?: string;
   amount: number | null;
   amount_cents: number | null;
   local_amount?: number | null;
@@ -181,14 +184,32 @@ async function synchroniser(declencheur: 'cron' | 'manuel') {
             statut_qonto: normaliserStatut(t.status),
             categorie_qonto: t.category ?? null,
             a_justificatif: (t.attachment_ids ?? []).length > 0,
+            // La liste des transactions fournit déjà ces identifiants :
+            // les mémoriser évite un appel au détail par opération, et
+            // c'est cet appel qui échouait en 404.
+            qonto_uuid: t.id ?? null,
+            attachment_ids: t.attachment_ids ?? null,
             synchronise_le: new Date().toISOString(),
           };
 
           if (existante) {
-            // Une opération en attente peut encore changer : on la met à jour
-            // tant qu'elle n'est pas consolidée.
             if (existante.statut_qonto !== 'completed') {
+              // Une opération en attente peut encore changer de montant ou
+              // de libellé : on la met à jour tant qu'elle n'est pas
+              // consolidée.
               await db.from('transactions_qonto').update(ligne).eq('id', existante.id);
+            } else {
+              // Une opération consolidée est figée quant à son montant, mais
+              // les identifiants techniques, eux, peuvent manquer : ils
+              // n'étaient pas relevés avant. Sans cette mise à jour, une
+              // opération déjà connue ne les recevrait JAMAIS, quel que soit
+              // le nombre de synchronisations.
+              await db.from('transactions_qonto').update({
+                qonto_uuid: ligne.qonto_uuid,
+                attachment_ids: ligne.attachment_ids,
+                a_justificatif: ligne.a_justificatif,
+                synchronise_le: ligne.synchronise_le,
+              }).eq('id', existante.id);
             }
             continue;
           }
@@ -203,45 +224,55 @@ async function synchroniser(declencheur: 'cron' | 'manuel') {
       }
     }
 
-    // ---- 3. Rapprochement des nouvelles opérations ----
-    const propositions: Record<string, unknown>[] = [];
+    // ---- 3. Échéances d'abonnement ----
+    // Le seul cas où une écriture naît sans humain : un montant déclaré
+    // d'avance que la banque confirme au centime. Le reste est laissé au
+    // moteur d'appariement, plus bas.
     for (const id of nouveauxIds) {
-      const { data: res } = await db.rpc('rapprocher_transaction', { p_id: id });
-      const r = res as { resultat?: string } | null;
+      const { data: res } = await db.rpc('echeance_pour_transaction', { p_transaction: id });
+      const e = res as Record<string, unknown> | null;
+      if (!e?.echeance_id) continue;
 
-      if (r?.resultat === 'depense_rattachee') {
-        auto += 1;
-      } else if (r?.resultat === 'echeance_exacte') {
-        // Le montant était déclaré à l'avance et la banque le confirme :
-        // c'est le seul cas où une écriture naît sans intervention.
-        const cree = await constaterEcheance(db, id, r as Record<string, unknown>);
-        if (cree) auto += 1;
-      } else if (r?.resultat === 'fournisseur_connu') {
-        propositions.push({ transaction: id, ...r });
-      }
+      const cree = await constaterEcheance(db, id, e);
+      if (cree) auto += 1;
     }
 
     // ---- 4. Justificatifs déposés dans Qonto ----
     // Une pièce jointe côté banque suffit à créer l'écriture : elle est
     // extraite puis soumise à validation, jamais enregistrée d'office.
+    // La récupération portait sur les seules opérations NOUVELLES. Une
+    // opération déjà connue dont le justificatif n'avait pas été
+    // rapatrié — parce que la synchronisation d'alors ne le faisait pas
+    // encore — ne l'était donc jamais, quel que soit le nombre de
+    // synchronisations suivantes.
     let justificatifsTraites = 0;
-    for (const id of nouveauxIds) {
-      const { data: tx } = await db
-        .from('transactions_qonto')
-        .select('id, a_justificatif, statut_qonto, statut_traitement, qonto_id')
-        .eq('id', id).single();
+    const echecsJustificatifs: string[] = [];
 
-      if (!tx?.a_justificatif) continue;
-      if (tx.statut_qonto !== 'completed') continue;      // montant encore mouvant
-      if (tx.statut_traitement !== 'a_traiter') continue; // déjà rattachée
+    const { data: aRecuperer } = await db
+      .from('transactions_qonto')
+      .select('id, qonto_uuid, numero_piece, attachment_ids')
+      .eq('a_justificatif', true)
+      .eq('statut_qonto', 'completed')
+      .is('chemin_justificatif', null)
+      .limit(50);
 
-      const ok = await recupererJustificatif(db, tx.id, tx.qonto_id, entetes);
-      if (ok) justificatifsTraites += 1;
+    for (const tx of aRecuperer ?? []) {
+      const r = await recupererJustificatif(
+        db, tx.id, tx.attachment_ids ?? [], tx.qonto_uuid, entetes);
+      if (r.ok) justificatifsTraites += 1;
+      else echecsJustificatifs.push(`${tx.numero_piece ?? tx.id} : ${r.motif}`);
     }
 
     // ---- 5. Balayage : une opération nouvelle peut correspondre à une
-    // dépense déjà saisie qui attendait son mouvement bancaire. ----
-    const { data: proposees } = await db.rpc('balayer_rapprochements');
+    // écriture déjà saisie qui attendait son mouvement bancaire. ----
+    //
+    // Le moteur unique remplace les six fonctions concurrentes. Il ne
+    // rattache seul qu'un montant exact ET connu d'avance ET sans
+    // ambiguïté ; tout le reste devient une proposition.
+    const { data: bilan } = await db.rpc('balayer_appariements');
+    const balayage = (bilan ?? {}) as Record<string, number>;
+    auto += Number(balayage.rattachees_automatiquement ?? 0);
+    const proposees = Number(balayage.propositions_en_attente ?? 0);
 
     const duree = Date.now() - debut;
 
@@ -255,10 +286,13 @@ async function synchroniser(declencheur: 'cron' | 'manuel') {
         solde_qonto: soldeTotal,
         duree_ms: duree,
         detail: {
-          propositions: propositions.length,
+          propositions: proposees,
           par_statut: parStatut,
           justificatifs: justificatifsTraites,
-          rapprochements_proposes: proposees ?? 0,
+          justificatifs_echecs: echecsJustificatifs,
+          rapprochements_proposes: proposees,
+          ambigues: balayage.ambigues ?? 0,
+          inexpliquees: balayage.restantes ?? 0,
         },
       }).eq('id', idJournal);
     }
@@ -267,11 +301,14 @@ async function synchroniser(declencheur: 'cron' | 'manuel') {
       succes: true,
       lues, nouvelles,
       rapprochees_auto: auto,
-      propositions: propositions.length,
+      propositions: proposees,
       solde: soldeTotal,
       par_statut: parStatut,
       justificatifs: justificatifsTraites,
-      rapprochements_proposes: proposees ?? 0,
+      justificatifs_echecs: echecsJustificatifs,
+      rapprochements_proposes: proposees,
+      ambigues: balayage.ambigues ?? 0,
+      inexpliquees: balayage.restantes ?? 0,
       duree_ms: duree,
     });
 
@@ -295,50 +332,109 @@ async function synchroniser(declencheur: 'cron' | 'manuel') {
  * comptabilité sans relecture : le montant vient de la banque, mais
  * l'affectation comptable reste une interprétation.
  */
+type ResultatJustificatif = { ok: boolean; motif: string };
+
 async function recupererJustificatif(
   db: ReturnType<typeof admin>,
   transactionId: string,
-  qontoId: string,
+  identifiants: string[],
+  qontoUuid: string | null,
   entetes: Record<string, string>
-): Promise<boolean> {
+): Promise<ResultatJustificatif> {
   try {
-    // 1. Détail de l'opération, pour obtenir les identifiants de pièces
-    const r = await fetch(`${BASE}/transactions/${qontoId}`, { headers: entetes });
-    if (!r.ok) return false;
-    const data = await r.json();
-    const ids: string[] = data.transaction?.attachment_ids ?? [];
-    if (ids.length === 0) return false;
+    // 1. Les identifiants viennent de la synchronisation. À défaut —
+    // opérations enregistrées avant que la liste ne les mémorise — on
+    // interroge le détail, avec l'UUID cette fois.
+    let ids: string[] = identifiants ?? [];
+
+    if (ids.length === 0) {
+      if (!qontoUuid) {
+        return { ok: false, motif: 'identifiants de pièce jointe inconnus — resynchronisez' };
+      }
+      const r = await fetch(`${BASE}/transactions/${qontoUuid}`, { headers: entetes });
+      if (!r.ok) return { ok: false, motif: `détail refusé par Qonto (${r.status})` };
+      const data = await r.json();
+      ids = data.transaction?.attachment_ids ?? [];
+    }
+
+    if (ids.length === 0) {
+      return { ok: false, motif: 'aucune pièce jointe sur cette opération' };
+    }
 
     // 2. Métadonnées de la première pièce
     const rA = await fetch(`${BASE}/attachments/${ids[0]}`, { headers: entetes });
-    if (!rA.ok) return false;
+    if (!rA.ok) return { ok: false, motif: `pièce jointe inaccessible (${rA.status})` };
     const att = await rA.json();
     const url = att.attachment?.url;
     const nom = att.attachment?.file_name ?? 'justificatif';
     const type = att.attachment?.file_content_type ?? 'application/pdf';
-    if (!url) return false;
+    if (!url) {
+      // Qonto ne rend l'adresse de téléchargement que pendant quelques
+      // minutes : la demander à nouveau la régénère.
+      return { ok: false, motif: 'adresse de téléchargement absente' };
+    }
 
     // 3. Téléchargement
     const rF = await fetch(url);
-    if (!rF.ok) return false;
+    if (!rF.ok) return { ok: false, motif: `téléchargement échoué (${rF.status})` };
     const buffer = Buffer.from(await rF.arrayBuffer());
 
     // 4. Stockage, en attendant la dépense qui le portera
     const chemin = `qonto/${transactionId}/${Date.now()}-${nom}`;
     const { error: eUp } = await db.storage
       .from('justificatifs').upload(chemin, buffer, { contentType: type });
-    if (eUp) return false;
+    if (eUp) return { ok: false, motif: `stockage refusé — ${eUp.message}` };
 
-    await db.from('transactions_qonto')
-      .update({ justificatif_recupere: true })
-      .eq('id', transactionId);
+    await db.from('transactions_qonto').update({
+      justificatif_recupere: true,
+      chemin_justificatif: chemin,
+      nom_justificatif: nom,
+      type_justificatif: type,
+    }).eq('id', transactionId);
 
-    // L'extraction proprement dite est déclenchée depuis l'interface :
-    // elle passe par la clé API du modèle et doit rester visible de
-    // l'utilisateur, avec le document affiché à côté des champs.
-    return true;
-  } catch {
-    return false;
+    // Avant toute création d'écriture, on vérifie qu'une dépense ne
+    // correspond pas déjà : une facture photographiée dans l'application
+    // puis déposée dans Qonto ne doit pas produire deux écritures.
+    const { data: cands } = await db.rpc('candidats_pour_transaction', {
+      p_transaction: transactionId,
+    });
+    const candidats = (cands ?? []) as Array<{ piece_id: string; decision: string }>;
+    const certains = candidats.filter((c) => c.decision === 'automatique');
+
+    // Une seule correspondance certaine, sinon un humain arbitre : deux
+    // écritures au même montant le même jour, cela existe.
+    if (certains.length === 1) {
+      const pieceId = certains[0].piece_id;
+
+      // Les trois écritures dispersées de l'ancienne version pouvaient
+      // réussir à moitié. `confirmer_appariement` crée le règlement,
+      // rattache l'opération et apprend le libellé du fournisseur en une
+      // seule transaction.
+      const { error: eJust } = await db.rpc('rattacher_justificatif', {
+        p_piece: pieceId, p_chemin: chemin, p_nom: nom,
+        p_type: type, p_taille: buffer.byteLength,
+      });
+      if (eJust) return { ok: false, motif: `rattachement refusé — ${eJust.message}` };
+
+      const { error: eApp } = await db.rpc('confirmer_appariement', {
+        p_piece: pieceId, p_transaction: transactionId, p_automatique: true,
+      });
+      if (eApp) return { ok: false, motif: `appariement refusé — ${eApp.message}` };
+
+      await db.from('transactions_qonto')
+        .update({ justificatif_traite: true })
+        .eq('id', transactionId);
+
+      return { ok: true, motif: 'rattaché à une écriture certaine' };
+    }
+
+    // Aucune écriture correspondante : l'extraction est déclenchée depuis
+    // l'interface, où le document reste affiché à côté des champs remplis.
+    // Une extraction lancée en tâche de fond produirait une écriture que
+    // personne n'aurait vue.
+    return { ok: true, motif: 'fichier récupéré, en attente d\u2019écriture' };
+  } catch (e) {
+    return { ok: false, motif: e instanceof Error ? e.message : 'erreur inconnue' };
   }
 }
 
@@ -372,29 +468,31 @@ async function constaterEcheance(
   const { data: t } = await db
     .from('transactions_qonto').select('date_operation').eq('id', transactionId).single();
 
-  const { data: dep } = await db.from('depenses').insert({
-    date_depense: t?.date_operation ?? e.date_prevue,
-    fournisseur: a.fournisseur,
-    libelle: `${a.nom} — ${e.periode}`,
-    categorie_id: a.categorie_id,
-    montant_ht: a.montant_ht,
-    taux_tva: a.taux_tva,
-    montant_tva: a.montant_tva,
-    montant_ttc: a.montant_ttc,
-    taux_deductibilite: 100,
-    compte: '6226',
-    tva_deductible: a.montant_tva,
-    moyen_paiement: 'prelevement',
-    paye_par: 'societe',
-    statut: 'validee',
-    transaction_qonto_id: transactionId,
-    paye_le: t?.date_operation ?? null,
-    notes: a.autoliquidation
-      ? 'TVA autoliquidée : déclarer en collectée et en déductible.'
+  // Chemin unique : la fonction calcule les montants d'après la
+  // catégorie, attribue le numéro de pièce, crée le règlement et
+  // journalise. Le régime de TVA est imposé, car aucune facture n'est
+  // ici disponible pour le déduire — c'est le contrat qui le sait.
+  const { data: res, error: eAchat } = await db.rpc('creer_achat', {
+    p_date: t?.date_operation ?? e.date_prevue,
+    p_tiers: a.fournisseur,
+    p_categorie: a.categorie_id,
+    p_montant_ttc: a.montant_ttc,
+    p_taux_tva: a.taux_tva,
+    p_objet: `${a.nom} — ${e.periode}`,
+    p_etat: 'validee',
+    p_origine: 'abonnement',
+    p_transaction: transactionId,
+    p_moyen_paiement: 'prelevement',
+    p_paye_par: 'societe',
+    p_notes: a.autoliquidation
+      ? 'TVA autoliquidée : collectée et déduite sur la même déclaration.'
       : 'Constatée automatiquement : montant déclaré confirmé par la banque.',
-  }).select('id, numero_piece').single();
+    p_regime: a.autoliquidation ? 'autoliquidation' : null,
+  });
 
-  if (!dep) return false;
+  if (eAchat) return false;
+  const dep = res as { id?: string; numero_piece?: string } | null;
+  if (!dep?.id) return false;
 
   await db.from('abonnement_echeances').update({
     statut: 'payee',
