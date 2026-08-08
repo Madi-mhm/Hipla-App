@@ -27,6 +27,7 @@ export type Justificatif = {
 
 export default function Justificatifs({
   pieceId, liste, manquante, modifiable, peutGerer, onChange,
+  exige, regle, motifExemption, decisionManuelle, nature,
 }: {
   pieceId: string;
   liste: Justificatif[];
@@ -34,6 +35,13 @@ export default function Justificatifs({
   modifiable: boolean;
   peutGerer: boolean;
   onChange: () => void;
+  /** La décision posée sur la pièce, ou null si la catégorie tranche. */
+  exige?: boolean | null;
+  /** Ce que dit la catégorie, à défaut de décision. */
+  regle?: boolean;
+  motifExemption?: string | null;
+  decisionManuelle?: boolean;
+  nature?: string;
 }) {
   const champ = useRef<HTMLInputElement>(null);
   const [enCours, setEnCours] = useState(false);
@@ -243,6 +251,23 @@ export default function Justificatifs({
         </div>
       )}
 
+      {/*
+        D'où vient la décision ? Une règle générale, ou un choix assumé.
+        Le dire est la moitié du travail : « justifié par le relevé »
+        sans raison est une affirmation, pas une justification.
+      */}
+      {peutGerer && modifiable && nature !== 'vente' && nature !== 'avoir' && (
+        <Decision
+          pieceId={pieceId}
+          exige={exige ?? null}
+          regle={regle ?? true}
+          motif={motifExemption ?? null}
+          manuelle={decisionManuelle ?? false}
+          aDesJustificatifs={liste.length > 0}
+          onChange={onChange}
+        />
+      )}
+
       {!modifiable && liste.length > 0 && (
         <p className="muted" style={{
           fontSize: 'var(--fs-xs)', marginTop: '.5rem', lineHeight: 1.5,
@@ -254,6 +279,183 @@ export default function Justificatifs({
     </div>
   );
 }
+
+/* ================================================================ */
+
+/**
+ * D'OÙ VIENT L'EXIGENCE DE JUSTIFICATIF
+ *
+ * Trois états, et il faut pouvoir les distinguer :
+ *
+ * · la CATÉGORIE tranche — état par défaut, réversible sans motif ;
+ * · on EXIGE explicitement — toujours défendable, aucun motif requis ;
+ * · on DISPENSE explicitement — demande un motif, parce qu'une charge
+ *   sans facture doit pouvoir s'expliquer trois ans plus tard.
+ *
+ * L'asymétrie est voulue : réclamer une pièce ne se justifie pas, s'en
+ * passer si.
+ */
+function Decision({
+  pieceId, exige, regle, motif, manuelle, aDesJustificatifs, onChange,
+}: {
+  pieceId: string;
+  exige: boolean | null;
+  regle: boolean;
+  motif: string | null;
+  manuelle: boolean;
+  aDesJustificatifs: boolean;
+  onChange: () => void;
+}) {
+  const [ouvert, setOuvert] = useState(false);
+  const [enCours, setEnCours] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [nouveauMotif, setNouveauMotif] = useState('');
+
+  const effectif = exige ?? regle;
+
+  async function decider(valeur: boolean) {
+    if (!valeur && !nouveauMotif.trim()) {
+      setErreur('Dispenser une écriture de facture demande un motif.');
+      return;
+    }
+    setEnCours(true);
+    setErreur(null);
+    const supabase = createClient();
+
+    const { error } = await supabase.rpc('decider_justificatif', {
+      p_piece: pieceId,
+      p_exige: valeur,
+      p_motif: valeur ? null : nouveauMotif.trim(),
+    });
+
+    if (error) { setErreur(error.message); setEnCours(false); return; }
+    setOuvert(false);
+    setNouveauMotif('');
+    setEnCours(false);
+    onChange();
+  }
+
+  async function reprendreRegle() {
+    setEnCours(true);
+    const supabase = createClient();
+    const { error } = await supabase.rpc('reprendre_regle_justificatif', {
+      p_piece: pieceId,
+    });
+    if (error) { setErreur(error.message); setEnCours(false); return; }
+    setOuvert(false);
+    setEnCours(false);
+    onChange();
+  }
+
+  return (
+    <div style={{
+      marginTop: '.7rem', paddingTop: '.6rem',
+      borderTop: '1px solid var(--g-200)',
+    }}>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between',
+        alignItems: 'center', gap: '.8rem', flexWrap: 'wrap',
+      }}>
+        <p className="muted" style={{ fontSize: 'var(--fs-xs)', lineHeight: 1.5 }}>
+          {effectif
+            ? 'Une facture est exigée'
+            : 'Cette écriture est dispensée de facture'}
+          {manuelle
+            ? ' — décision prise sur cette pièce'
+            : ' — règle de la catégorie'}
+          {!effectif && motif && (
+            <span style={{ display: 'block', fontStyle: 'italic' }}>
+              « {motif} »
+            </span>
+          )}
+        </p>
+        <button onClick={() => setOuvert(!ouvert)} style={boutonDiscret}>
+          {ouvert ? 'Fermer' : 'Modifier'}
+        </button>
+      </div>
+
+      {ouvert && (
+        <div style={{
+          marginTop: '.6rem', padding: '.75rem .9rem', borderRadius: 6,
+          background: 'var(--g-50)',
+        }}>
+          {erreur && (
+            <p style={{
+              fontSize: 'var(--fs-xs)', color: 'var(--danger)', marginBottom: '.5rem',
+            }}>
+              {erreur}
+            </p>
+          )}
+
+          {effectif ? (
+            <>
+              <p style={{ fontSize: 'var(--fs-sm)', marginBottom: '.5rem' }}>
+                Dispenser cette écriture de facture ?
+              </p>
+              <p className="muted" style={{
+                fontSize: 'var(--fs-xs)', lineHeight: 1.5, marginBottom: '.6rem',
+              }}>
+                {aDesJustificatifs
+                  ? 'Des pièces sont déjà jointes : la dispense ne les supprime pas.'
+                  : 'La charge cessera d’être signalée comme incomplète. Le motif restera au journal.'}
+              </p>
+              <input type="text" value={nouveauMotif}
+                onChange={(e) => setNouveauMotif(e.target.value)}
+                placeholder="Commission bancaire, ticket illisible, achat de faible montant…"
+                style={{ width: '100%' }} />
+              <div style={{ display: 'flex', gap: '.5rem', marginTop: '.6rem' }}>
+                <button onClick={() => decider(false)}
+                  disabled={enCours || !nouveauMotif.trim()}
+                  className="btn btn--ghost" style={petitBouton}>
+                  Dispenser
+                </button>
+                {manuelle && (
+                  <button onClick={reprendreRegle} disabled={enCours}
+                    className="btn btn--ghost" style={petitBouton}>
+                    Revenir à la règle
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: 'var(--fs-sm)', marginBottom: '.5rem' }}>
+                Exiger une facture pour cette écriture ?
+              </p>
+              <p className="muted" style={{
+                fontSize: 'var(--fs-xs)', lineHeight: 1.5, marginBottom: '.6rem',
+              }}>
+                Elle sera signalée tant qu’aucune pièce ne sera jointe. Réclamer
+                une facture ne demande pas de motif : c’est toujours défendable.
+              </p>
+              <div style={{ display: 'flex', gap: '.5rem' }}>
+                <button onClick={() => decider(true)} disabled={enCours}
+                  className="btn btn--ghost" style={petitBouton}>
+                  Exiger
+                </button>
+                {manuelle && (
+                  <button onClick={reprendreRegle} disabled={enCours}
+                    className="btn btn--ghost" style={petitBouton}>
+                    Revenir à la règle
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const boutonDiscret: React.CSSProperties = {
+  border: 0, background: 'none', padding: '.1rem .3rem', cursor: 'pointer',
+  fontSize: '.68rem', color: 'var(--g-500)', textDecoration: 'underline',
+  flexShrink: 0,
+};
+const petitBouton: React.CSSProperties = {
+  minHeight: 28, padding: '.15rem .7rem', fontSize: '.72rem',
+};
 
 const lienFichier: React.CSSProperties = {
   border: 0, background: 'none', padding: 0, cursor: 'pointer',

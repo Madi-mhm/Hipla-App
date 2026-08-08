@@ -10,7 +10,7 @@
  *  - une catégorie bloquée (amendes) empêche l'enregistrement.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { compresser, poids } from '@/lib/compression';
@@ -38,6 +38,10 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
   const [tauxTva, setTauxTva] = useState(20);
   const [moyenPaiement, setMoyenPaiement] = useState('carte');
   const [payePar, setPayePar] = useState('societe');
+  // Les payeurs viennent de la base : deux associés étaient écrits en
+  // dur ici, et un troisième n'aurait jamais pu apparaître.
+  const [payeurs, setPayeurs] = useState<
+    Array<{ valeur: string; libelle: string; avance: boolean }>>([]);
   const [notes, setNotes] = useState('');
   const [fichiers, setFichiers] = useState<File[]>([]);
   const [infoCompression, setInfoCompression] = useState<string | null>(null);
@@ -85,6 +89,14 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
         : `${poids(origine)} → ${poids(finale)} (−${Math.round((1 - finale / origine) * 100)} %)`
     );
   }
+
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const { data } = await supabase.rpc('payeurs_possibles');
+      if (data) setPayeurs(data as typeof payeurs);
+    })();
+  }, []);
 
   async function soumettre(e: React.FormEvent) {
     e.preventDefault();
@@ -286,9 +298,11 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
           <label className={styles.champ}>
             <span>Payé par</span>
             <select value={payePar} onChange={(e) => setPayePar(e.target.value)}>
-              <option value="societe">La société</option>
-              <option value="mahdi">Mahdi (à rembourser)</option>
-              <option value="sabir">Sabir (à rembourser)</option>
+              {payeurs.length === 0 ? (
+                <option value="societe">La société</option>
+              ) : payeurs.map((x) => (
+                <option key={x.valeur} value={x.valeur}>{x.libelle}</option>
+              ))}
             </select>
           </label>
         </div>

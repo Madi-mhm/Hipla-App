@@ -164,8 +164,8 @@ export default function FormulaireDeplacement({
   }
 
   return (
-    <form onSubmit={soumettre} className={styles.formulaire}>
-      {erreur && <p className={styles.erreur}>{erreur}</p>}
+    <form onSubmit={soumettre} className={styles.form}>
+      {erreur && <p className={styles.alerteRouge}>{erreur}</p>}
 
       {/* Les listes servent d'autocomplétion native : le champ reste
           libre, la suggestion n'impose rien. */}
@@ -177,13 +177,13 @@ export default function FormulaireDeplacement({
       </datalist>
 
       <div className={styles.grille}>
-        <label>
+        <label className={styles.champ}>
           <span>Date du trajet *</span>
           <input type="date" value={dateTrajet} required
             onChange={(e) => setDateTrajet(e.target.value)} />
         </label>
 
-        <label>
+        <label className={styles.champ}>
           <span>Véhicule *</span>
           <select value={vehiculeId} onChange={(e) => setVehiculeId(e.target.value)}>
             {vehicules.map((v) => (
@@ -194,14 +194,14 @@ export default function FormulaireDeplacement({
           </select>
         </label>
 
-        <label>
+        <label className={styles.champ}>
           <span>Départ *</span>
           <input type="text" value={depart} list="lieux-connus" required
             onChange={(e) => setDepart(e.target.value)}
             placeholder="Chambéry" />
         </label>
 
-        <label>
+        <label className={styles.champ}>
           <span>Arrivée</span>
           <input type="text" value={arrivee} list="lieux-connus"
             onChange={(e) => setArrivee(e.target.value)}
@@ -266,21 +266,23 @@ export default function FormulaireDeplacement({
       </div>
 
       <div className={styles.grille} style={{ marginTop: '1rem' }}>
-        <label style={{ gridColumn: '1 / -1' }}>
+        <label className={`${styles.champ} ${styles.pleine}`}>
           <span>Motif professionnel *</span>
           <input type="text" value={motif} list="motifs-connus" required
             onChange={(e) => setMotif(e.target.value)}
             placeholder="Prospection commerciale — hôtels et bureaux" />
         </label>
 
-        <label>
+        <label className={styles.champ}>
           <span>Kilomètres *</span>
           <input type="text" inputMode="decimal" value={kilometres} required
             onChange={(e) => setKilometres(e.target.value)}
             placeholder="80" />
         </label>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem', paddingTop: '1.4rem' }}>
+        <label className={styles.champ}
+          style={{ flexDirection: 'row', alignItems: 'center',
+                   gap: '.5rem', paddingTop: '1.55rem' }}>
           <input type="checkbox" checked={allerRetour} style={{ width: 'auto' }}
             onChange={(e) => setAllerRetour(e.target.checked)}
             disabled={etapes.length > 0} />

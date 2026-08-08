@@ -46,6 +46,10 @@ type Apercu = {
   nb_justificatifs: number;
   justificatifs: Justificatif[];
   modifiable: boolean;
+  justificatif_exige: boolean | null;
+  justificatif_regle: boolean;
+  motif_exemption: string | null;
+  decision_manuelle: boolean;
   banque: { numero_piece: string; date_operation: string; libelle: string; montant: number } | null;
   reglements: Array<{ date: string; montant: number; moyen: string }>;
   lien: string;
@@ -253,6 +257,11 @@ function Contenu({ a, onFermer, onRecharger }: {
         modifiable={a.modifiable}
         peutGerer
         onChange={onRecharger}
+        exige={a.justificatif_exige}
+        regle={a.justificatif_regle}
+        motifExemption={a.motif_exemption}
+        decisionManuelle={a.decision_manuelle}
+        nature={a.nature}
       />
 
       <PiedApercu lien={a.lien} onFermer={onFermer} />
