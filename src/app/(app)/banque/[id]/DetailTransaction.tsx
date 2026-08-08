@@ -76,11 +76,18 @@ export type EcritureOuverte = {
   etat: string;
 };
 
+/** Ce que la société doit à un associé, à l'instant de l'affichage. */
+export type SoldeAssocie = {
+  associe: string; nom: string;
+  avance: number; rembourse: number; solde: number; lignes: number;
+};
+
 type Props = {
   transaction: Transaction;
   categories: Categorie[];
   candidats: CandidatPiece[];
   ouvertes: EcritureOuverte[];
+  soldes: SoldeAssocie[];
   urlJustificatif: string | null;
   ecriture: Ecriture;
   regle: Record<string, unknown> | null;
@@ -98,7 +105,7 @@ const COMPTES_DIVERS = [
 ];
 
 export default function DetailTransaction({
-  transaction: t, categories, candidats, ouvertes, urlJustificatif,
+  transaction: t, categories, candidats, ouvertes, soldes, urlJustificatif,
   ecriture, regle, peutGerer,
 }: Props) {
   const router = useRouter();
@@ -119,6 +126,11 @@ export default function DetailTransaction({
 
   // Rattachement manuel
   const [choixEcriture, setChoixEcriture] = useState('');
+
+  // Remboursement d'associé
+  const [associeChoisi, setAssocieChoisi] = useState(
+    soldes.find((x) => Number(x.solde) >= Math.abs(Number(t.montant)))?.associe
+    ?? soldes[0]?.associe ?? '');
 
   // Avoir fournisseur
   const [avoirTiers, setAvoirTiers] = useState(t.contrepartie ?? t.libelle);
@@ -177,6 +189,27 @@ export default function DetailTransaction({
       + (piece?.regime_tva && piece.regime_tva !== 'france'
          ? ` — régime « ${piece.regime_tva} »` : '')
       + (t.chemin_justificatif ? '. Justificatif repris de Qonto.' : '.')
+    );
+    setEnCours(false);
+    router.refresh();
+  }
+
+  async function rembourser() {
+    if (!associeChoisi) { setErreur('Choisissez l\u2019associé remboursé.'); return; }
+    setEnCours(true);
+    setErreur(null);
+    const supabase = createClient();
+
+    const { data, error } = await supabase.rpc('rembourser_associe', {
+      p_transaction: t.id, p_associe: associeChoisi,
+    });
+
+    if (error) { setErreur(`Remboursement impossible — ${error.message}`); setEnCours(false); return; }
+
+    const r = data as { numero_piece?: string; solde_apres?: number } | null;
+    setSucces(
+      `${r?.numero_piece ?? 'Écriture'} enregistrée. `
+      + `Solde restant dû : ${money(Number(r?.solde_apres ?? 0))}.`
     );
     setEnCours(false);
     router.refresh();
@@ -393,6 +426,54 @@ export default function DetailTransaction({
               Rattacher
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ---------- Remboursement d'associé ---------- */}
+      {!traitee && consolidee && t.sens === 'debit' && peutGerer
+       && soldes.some((x) => Number(x.solde) > 0.005) && (
+        <div className="card" style={{ marginBottom: '1.25rem' }}>
+          <p className="card__title">La société rembourse un associé</p>
+          <p className="muted" style={{
+            fontSize: 'var(--fs-sm)', lineHeight: 1.55, maxWidth: '70ch', marginBottom: '.6rem',
+          }}>
+            Ce virement éteint une dette, il ne crée pas de charge.
+          </p>
+          <p className="muted" style={{
+            fontSize: 'var(--fs-xs)', lineHeight: 1.5, maxWidth: '70ch', marginBottom: '.9rem',
+          }}>
+            L&apos;enregistrer en dépense compterait la charge deux fois : une
+            première quand l&apos;associé l&apos;a avancée, une seconde
+            aujourd&apos;hui. Vos frais et votre résultat en seraient faussés du
+            double du montant.
+          </p>
+
+          <div style={{ display: 'flex', gap: '.8rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <label style={{ flex: '1 1 18rem' }}>
+              <span>Associé remboursé</span>
+              <select value={associeChoisi}
+                onChange={(e) => setAssocieChoisi(e.target.value)}>
+                {soldes.filter((x) => Number(x.solde) > 0.005).map((x) => (
+                  <option key={x.associe} value={x.associe}>
+                    {x.nom} — {money(Number(x.solde))} dus
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button onClick={rembourser} disabled={enCours || !associeChoisi}
+              className="btn btn--gold">
+              Enregistrer le remboursement
+            </button>
+          </div>
+
+          <p className="muted" style={{
+            fontSize: 'var(--fs-xs)', marginTop: '.8rem', lineHeight: 1.5, maxWidth: '70ch',
+          }}>
+            Le versement ne peut pas dépasser le solde dû : au-delà, ce ne serait
+            plus un remboursement mais une avance de la société à
+            l&apos;associé — une opération que l&apos;administration peut
+            requalifier en rémunération.
+          </p>
         </div>
       )}
 

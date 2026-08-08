@@ -65,6 +65,14 @@ export default function DetailFacture({
   piece, lignes, reglements, prestations, entreprise, creditsLibres,
   peutGerer, peutEncaisser,
 }: Props) {
+  // Jours pleins depuis l'échéance. Négatif tant qu'elle n'est pas
+  // atteinte : la facture attend, elle n'est pas en retard.
+  const joursRetard = piece.date_echeance
+    ? Math.floor(
+        (Date.now() - new Date(piece.date_echeance + 'T12:00:00').getTime())
+        / 86400000)
+    : 0;
+
   const router = useRouter();
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -337,6 +345,21 @@ export default function DetailFacture({
               <a href={`/api/factures/${piece.id}/pdf`}
                 className="btn btn--ghost" target="_blank" rel="noopener">
                 {modifiable ? 'Aperçu PDF' : 'Télécharger le PDF'}
+              </a>
+            )}
+            {/*
+              La relance n'existe que sur une facture émise et non soldée.
+              Le degré — rappel, relance, mise en demeure — se déduit du
+              retard : envoyer une mise en demeure pour trois jours coûte
+              un client, envoyer un rappel poli après trois mois coûte une
+              créance.
+            */}
+            {piece.etat === 'validee' && resteAPayer > 0.005 && (
+              <a href={`/api/ventes/${piece.id}/relance`}
+                className="btn btn--ghost" target="_blank" rel="noopener"
+                title="Courrier de relance — ce n'est pas une facture et n'engendre aucune TVA">
+                {joursRetard > 30 ? 'Mise en demeure'
+                 : joursRetard > 0 ? 'Relance' : 'Rappel d’échéance'}
               </a>
             )}
             {peutEncaisser && !modifiable && piece.etat === 'validee' && resteAPayer > 0.005 && (

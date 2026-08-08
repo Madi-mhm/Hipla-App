@@ -8,6 +8,7 @@ import { money, date } from '@/lib/format';
 import { indemniteKm, type LigneBareme } from '@/lib/comptabilite';
 import { LIBELLE_STATUT, CLASSE_STATUT, type Deplacement, type Vehicule } from '@/lib/types';
 import ActionsValidation from '@/components/ActionsValidation';
+import ConstaterKm, { type EtatKm } from './ConstaterKm';
 
 export const metadata = { title: 'Déplacements — Hipla Gestion' };
 export const dynamic = 'force-dynamic';
@@ -20,12 +21,15 @@ export default async function Page() {
   const supabase = await createClient();
   const annee = new Date().getFullYear();
 
-  const [{ data: dep }, { data: veh }, { data: bar }] = await Promise.all([
+  const [{ data: dep }, { data: veh }, { data: bar }, { data: etatKm }] = await Promise.all([
     supabase.from('deplacements')
       .select('*, vehicules(libelle, immatriculation, cv_fiscaux, motorisation), profils!deplacements_cree_par_fkey(nom_complet)')
       .order('date_trajet', { ascending: false }).limit(200),
     supabase.from('vehicules').select('*').eq('actif', true),
     supabase.from('bareme_km').select('*').eq('annee', annee),
+    // Ce qui attend d'être constaté : le calcul appartient à la base,
+    // qui seule connaît le cumul annuel et les périodes déjà closes.
+    supabase.rpc('km_a_constater'),
   ]);
 
   const deplacements = (dep ?? []) as Deplacement[];
@@ -56,6 +60,15 @@ export default async function Page() {
       <Header titre="Déplacements" sousTitre={`Indemnités kilométriques ${annee}`} />
 
       <div className="content">
+        {/*
+          Les trajets s'accumulent sans jamais devenir une charge tant
+          qu'on ne les constate pas. Ce bloc est le seul chemin qui les
+          transforme en écriture — et en créance sur la société.
+        */}
+        {vehicules.length > 0 && etatKm && (
+          <ConstaterKm etat={etatKm as EtatKm} peutConstater={peutValider} />
+        )}
+
         {vehicules.length === 0 ? (
           <div className="card">
             <p>Aucun véhicule enregistré.</p>

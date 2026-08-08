@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import DetailTransaction, {
-  type CandidatPiece, type Ecriture, type EcritureOuverte,
+  type CandidatPiece, type Ecriture, type EcritureOuverte, type SoldeAssocie,
 } from './DetailTransaction';
 import type { Categorie } from '@/lib/types';
 
@@ -71,6 +71,11 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     urlJustificatif = data?.signedUrl ?? null;
   }
 
+  // Ce que la société doit à chaque associé : sans ce chiffre, on ne
+  // peut pas distinguer un remboursement d'une dépense, et les
+  // confondre compterait la charge deux fois.
+  const { data: soldes } = await supabase.rpc('solde_compte_courant');
+
   // Une règle déclarée ou un alias appris peut pré-remplir la saisie.
   const { data: regle } = await supabase.rpc('regle_pour_transaction', {
     p_transaction: id,
@@ -100,6 +105,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           urlJustificatif={urlJustificatif}
           ecriture={ecriture}
           regle={regle as Record<string, unknown> | null}
+          soldes={(soldes ?? []) as SoldeAssocie[]}
           peutGerer={peut(profil.role, 'banque', 'update')}
         />
       </div>

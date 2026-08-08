@@ -335,6 +335,170 @@ table { width: 100%; border-collapse: collapse; }
    Placé ici et non dans un module CSS : les modules n'acceptent pas
    de règle composée uniquement de sélecteurs globaux.
    ============================================================ */
+/* ================================================================
+   LA FENÊTRE
+
+   Sur grand écran : centrée, sur fond assombri.
+   Sur téléphone : une feuille qui monte du bas, tirée pour fermer.
+
+   Un seul composant, deux comportements — pas deux composants qui
+   finiraient par diverger.
+   ================================================================ */
+
+.fenetre-fond {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem;
+  background: rgba(0, 21, 43, 0.42);
+  /* Le flou détache la fenêtre sans masquer le contexte : on voit
+     encore d'où l'on vient. */
+  backdrop-filter: blur(3px);
+  animation: fenetre-fond-entree 0.18s ease-out;
+}
+
+.fenetre-fond[data-ferme] {
+  animation: fenetre-fond-sortie 0.18s ease-in forwards;
+}
+
+@keyframes fenetre-fond-entree {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes fenetre-fond-sortie {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+.fenetre-panneau {
+  position: relative;
+  width: 100%;
+  max-width: 46rem;
+  max-height: 88vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--g-0);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px -12px rgba(0, 21, 43, 0.35);
+  animation: fenetre-entree 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Certaines pages — un détail de facture, un plan d'amortissement —
+   ont besoin de largeur. */
+.fenetre-panneau[data-large] { max-width: 64rem; }
+
+.fenetre-panneau[data-ferme] {
+  animation: fenetre-sortie 0.18s ease-in forwards;
+}
+
+@keyframes fenetre-entree {
+  from { opacity: 0; transform: translateY(12px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes fenetre-sortie {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(8px) scale(0.99); }
+}
+
+.fenetre-fermer {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 2;
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--g-100);
+  color: var(--g-600);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.fenetre-fermer:hover { background: var(--g-200); color: var(--g-800); }
+
+.fenetre-poignee { display: none; }
+
+.fenetre-contenu { padding: 0.25rem 0 0; }
+
+/* Le contenu est une PAGE : son en-tête et sa marge propres feraient
+   double emploi dans une fenêtre. On les neutralise ici plutôt que de
+   fabriquer une seconde version de chaque écran. */
+.fenetre-contenu .content { padding: 1.5rem; }
+.fenetre-contenu header { border-radius: 10px 10px 0 0; }
+
+/* ---- Téléphone : une feuille qui monte ---- */
+@media (max-width: 560px) {
+  .fenetre-fond {
+    align-items: flex-end;
+    padding: 0;
+    backdrop-filter: blur(2px);
+  }
+
+  .fenetre-panneau {
+    max-width: none;
+    max-height: 92vh;
+    border-radius: 16px 16px 0 0;
+    padding-top: 0.5rem;
+    /* Le glissement est appliqué en ligne par le composant ; la
+       transition ne joue qu'au relâchement. */
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: feuille-entree 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .fenetre-panneau[data-ferme] {
+    animation: feuille-sortie 0.2s ease-in forwards;
+  }
+
+  @keyframes feuille-entree {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+  @keyframes feuille-sortie {
+    from { transform: translateY(0); }
+    to   { transform: translateY(100%); }
+  }
+
+  /* La barre de préhension : elle dit au pouce que la feuille se tire.
+     Sans elle, on cherche la croix. */
+  .fenetre-poignee {
+    display: block;
+    width: 2.5rem;
+    height: 4px;
+    margin: 0.35rem auto 0.6rem;
+    border-radius: 2px;
+    background: var(--g-300);
+  }
+
+  .fenetre-fermer {
+    top: 0.5rem;
+    right: 0.6rem;
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .fenetre-contenu .content { padding: 1rem; }
+}
+
+/* Une animation qui s'impose à qui l'a désactivée est une faute
+   d'accessibilité, pas un détail. */
+@media (prefers-reduced-motion: reduce) {
+  .fenetre-fond,
+  .fenetre-panneau { animation: none; transition: none; }
+}
+
+/* Une fenêtre ne s'imprime pas : c'est la page qui compte. */
+@media print {
+  .fenetre-fond { position: static; background: none; padding: 0; }
+  .fenetre-fermer, .fenetre-poignee { display: none; }
+}
+
 @media print {
   aside,
   header,

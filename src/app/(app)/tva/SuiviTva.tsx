@@ -131,7 +131,22 @@ export default function SuiviTva({ suivi }: { suivi: Suivi }) {
 
       {/* ---------- La déclaration ---------- */}
       <div className="card" style={{ marginBottom: '1.25rem' }}>
-        <p className="card__title">Ce que porterait la déclaration</p>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between',
+          alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap',
+        }}>
+          <p className="card__title" style={{ margin: 0 }}>
+            Ce que porterait la déclaration
+          </p>
+          {/*
+            « Porterait » : tant que la période n'est pas figée, ces
+            montants suivent les écritures et changent à chaque saisie.
+          */}
+          <Link href="/tva/cloture" className="btn btn--ghost"
+            style={{ minHeight: 28, padding: '.15rem .7rem', fontSize: '.72rem' }}>
+            Figer une période
+          </Link>
+        </div>
 
         <div className="table-scroll">
           <table style={{ minWidth: 480, fontSize: 'var(--fs-sm)', marginTop: '.6rem' }}>
