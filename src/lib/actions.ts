@@ -62,8 +62,12 @@ export async function construireActions(
   const pilote = role === 'proprietaire';
 
   const [depenses, deplacements, justificatifs, taches] = await Promise.all([
-    supabase.from('depenses')
-      .select('id, statut, fournisseur, montant_ttc, cree_par, motif_rejet'),
+    // Le registre remplace `depenses` : sans cela, une saisie récente
+    // n'apparaissait dans aucune alerte, et personne ne savait qu'elle
+    // attendait une validation.
+    supabase.from('pieces')
+      .select('id, etat, tiers_libelle, montant_ttc, cree_par, motif_rejet')
+      .in('nature', ['achat', 'creation', 'km']),
     supabase.from('deplacements')
       .select('id, statut, depart, arrivee, cree_par, motif_rejet'),
     supabase.from('justificatifs').select('depense_id'),
@@ -72,7 +76,14 @@ export async function construireActions(
       .in('statut', ['a_faire', 'en_cours']),
   ]);
 
-  const lignesDep = depenses.data ?? [];
+  // Le registre nomme l'état `etat` et le tiers `tiers_libelle`. On
+  // normalise ici plutôt que de retoucher les vingt endroits qui lisent
+  // `statut` et `fournisseur` — moins de surface de casse.
+  const lignesDep = (depenses.data ?? []).map((p) => ({
+    ...p,
+    statut: p.etat,
+    fournisseur: p.tiers_libelle,
+  }));
   const lignesDepl = deplacements.data ?? [];
   const avecJustif = new Set((justificatifs.data ?? []).map((j) => j.depense_id));
 
@@ -194,7 +205,8 @@ export async function construireActions(
          transactionsATraiter, synchroQonto, rapprochementsProposes,
          justificatifsQonto] = await Promise.all([
     supabase.from('vehicules').select('id, libelle, date_ct').eq('actif', true),
-    supabase.from('frais_creation').select('id, statut_reprise, montant_ttc'),
+    supabase.from('pieces')
+      .select('id, etat, montant_ttc').eq('nature', 'creation'),
     supabase.from('sauvegardes').select('demarree_le, statut')
       .eq('statut', 'reussie').order('demarree_le', { ascending: false }).limit(1),
     supabase.from('commentaires').select('id, type, contenu, numero_piece')
@@ -214,9 +226,10 @@ export async function construireActions(
       .select('demarree_le')
       .eq('statut', 'reussie')
       .order('demarree_le', { ascending: false }).limit(1),
-    supabase.from('depenses')
-      .select('id, numero_piece, fournisseur, montant_ttc')
-      .eq('statut_rapprochement', 'propose'),
+    supabase.from('pieces')
+      .select('id, numero_piece, tiers_libelle, montant_ttc')
+      .eq('statut_rapprochement', 'propose')
+      .in('nature', ['achat', 'creation', 'km']),
     supabase.from('v_justificatifs_qonto').select('id, contrepartie, montant'),
   ]);
 
@@ -237,7 +250,7 @@ export async function construireActions(
   // ---- IMPORTANT : rapprochements proposés ----
   // Le montant vient de la banque, mais le lien entre l'opération et
   // l'écriture reste une interprétation : il appelle une confirmation.
-  const aConfirmer = rapprochementsProposes.data ?? [];
+  const aConfirmer = (rapprochementsProposes.data ?? []).map((p) => ({ ...p, fournisseur: p.tiers_libelle }));
   if (aConfirmer.length > 0) {
     actions.push({
       id: 'rapprochements-proposes',
@@ -428,7 +441,7 @@ export async function construireActions(
   }
 
   // ---- IMPORTANT : frais de création non ratifiés ----
-  const aRatifier = (frais.data ?? []).filter((f) => f.statut_reprise === 'a_valider');
+  const aRatifier = (frais.data ?? []).filter((f) => f.etat === 'a_valider');
   if (aRatifier.length > 0) {
     const total = aRatifier.reduce((s, f) => s + Number(f.montant_ttc), 0);
     actions.push({

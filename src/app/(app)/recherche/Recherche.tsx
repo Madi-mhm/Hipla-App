@@ -17,7 +17,7 @@ import styles from './recherche.module.css';
 type Piece = {
   id: string;
   numero: string | null;
-  nature: 'depense' | 'frais' | 'deplacement' | 'abonnement';
+  nature: 'depense' | 'frais' | 'deplacement' | 'abonnement' | 'vente';
   date: string;
   tiers: string;
   libelle: string | null;
@@ -33,6 +33,9 @@ const LIBELLE_NATURE: Record<string, string> = {
   frais: 'Frais de création',
   deplacement: 'Déplacement',
   abonnement: 'Abonnement',
+  // Les ventes étaient absentes : on ne pouvait pas retrouver une
+  // facture émise depuis la recherche.
+  vente: 'Vente',
 };
 
 const CLASSE_STATUT: Record<string, string> = {
@@ -40,6 +43,9 @@ const CLASSE_STATUT: Record<string, string> = {
   gratuit: 'badge--info', resilie: 'badge--neutral',
   en_attente: 'badge--warning', a_valider: 'badge--warning',
   rejetee: 'badge--danger', rejete: 'badge--neutral',
+  // États propres au registre : sans eux, un brouillon ou une écriture
+  // annulée s'afficherait sans style, donc sans distinction visible.
+  brouillon: 'badge--neutral', annulee: 'badge--neutral',
 };
 
 export default function Recherche({ pieces }: { pieces: Piece[] }) {
@@ -113,6 +119,7 @@ export default function Recherche({ pieces }: { pieces: Piece[] }) {
               <option value="frais">Frais de création</option>
               <option value="deplacement">Déplacements</option>
               <option value="abonnement">Abonnements</option>
+              <option value="vente">Ventes</option>
             </select></label>
           <label><span>Du</span>
             <input type="date" value={du} onChange={(e) => setDu(e.target.value)} /></label>

@@ -75,12 +75,14 @@ export default function TableauFrais({ frais, categories, peutModifier }: Props)
   async function ratifierTout() {
     setEnCours(true);
     const supabase = createClient();
-    const { error } = await supabase
-      .from('frais_creation')
-      .update({ statut_reprise: 'repris', modifie_le: new Date().toISOString() })
-      .eq('statut_reprise', 'a_valider');
-
-    if (error) { setErreur(error.message); setEnCours(false); return; }
+    // `valider_piece` fait le travail complet : elle numérote, fige les
+    // montants et rend la TVA exigible. La mise à jour directe de
+    // `frais_creation` ne touchait plus le registre — la ratification
+    // n'aurait produit AUCUN effet comptable.
+    for (const f of aRatifier) {
+      const { error } = await supabase.rpc('valider_piece', { p_id: f.id });
+      if (error) { setErreur(error.message); setEnCours(false); return; }
+    }
 
     await supabase.rpc('journaliser', {
       p_action: 'ratification', p_table: 'frais_creation', p_id: null,
@@ -409,6 +411,10 @@ function LigneEdition({
   const [payeur, setPayeur] = useState(frais.associe_payeur);
   const [statut, setStatut] = useState(frais.statut_reprise);
   const [enCours, setEnCours] = useState(false);
+  // Ce composant n'avait aucun état d'erreur : un échec d'enregistrement
+  // passait inaperçu, et l'on croyait avoir corrigé une ligne qui ne
+  // l'était pas.
+  const [erreur, setErreur] = useState<string | null>(null);
 
   async function enregistrer() {
     const v = parseFloat(ttc.replace(',', '.'));
@@ -419,22 +425,42 @@ function LigneEdition({
 
     setEnCours(true);
     const supabase = createClient();
-    const { error } = await supabase.from('frais_creation').update({
-      date_engagement: dateEng,
-      fournisseur: fournisseur.trim(),
-      libelle: libelle.trim() || null,
-      categorie_id: categorieId || null,
-      montant_ht: m.ht, taux_tva: taux, montant_tva: m.tva, montant_ttc: m.ttc,
-      tva_deductible: tvaRecuperable(m.tva, dedu),
-      compte: cat?.compte ?? frais.compte,
-      associe_payeur: payeur,
-      statut_reprise: statut,
-      modifie_le: new Date().toISOString(),
-    }).eq('id', frais.id);
+    // `modifier_achat` recalcule les montants, met à jour le tiers et
+    // journalise. Écrire directement dans `frais_creation` laissait le
+    // registre inchangé : la correction était invisible partout ailleurs.
+    const { error } = await supabase.rpc('modifier_achat', {
+      p_piece: frais.id,
+      p_date: dateEng,
+      p_tiers: fournisseur.trim(),
+      p_categorie: categorieId || null,
+      p_montant_ttc: m.ttc,
+      p_taux_tva: taux,
+      p_objet: libelle.trim() || null,
+      p_paye_par: payeur,
+      p_deductibilite: dedu,
+    });
+
+    if (error) { setErreur(error.message); setEnCours(false); return; }
+
+    // Le statut n'est pas un champ modifiable : valider ou rejeter sont
+    // des gestes, qui numérotent, figent les montants et rendent la TVA
+    // exigible. `modifier_achat` ne les couvre pas.
+    if (statut !== frais.statut_reprise) {
+      if (statut === 'repris') {
+        const { error: e } = await supabase.rpc('valider_piece', { p_id: frais.id });
+        if (e) { setErreur(e.message); setEnCours(false); return; }
+      } else if (statut === 'rejete') {
+        const { error: e } = await supabase.rpc('rejeter_piece', {
+          p_id: frais.id,
+          p_motif: 'Rejeté depuis l\u2019écran des frais de création',
+        });
+        if (e) { setErreur(e.message); setEnCours(false); return; }
+      }
+    }
 
     if (!error) {
       await supabase.rpc('journaliser', {
-        p_action: 'modification', p_table: 'frais_creation', p_id: frais.id,
+        p_action: 'modification', p_table: 'pieces', p_id: frais.id,
         p_details: detailsModification(
           {
             date_engagement: frais.date_engagement,
@@ -470,6 +496,16 @@ function LigneEdition({
   return (
     <tr style={{ borderBottom: '2px solid var(--gold)', background: 'var(--g-50)' }}>
       <td colSpan={8} style={{ padding: '.9rem .4rem' }}>
+        {/* Dans la cellule : un paragraphe placé entre deux lignes de
+            tableau serait sorti du tableau par le navigateur. */}
+        {erreur && (
+          <p style={{
+            fontSize: 'var(--fs-xs)', color: 'var(--danger)',
+            marginBottom: '.6rem',
+          }}>
+            {erreur}
+          </p>
+        )}
         <div className={styles.grilleEdition}>
           <label><span>Date</span>
             <input type="date" value={dateEng} onChange={(e) => setDateEng(e.target.value)} /></label>

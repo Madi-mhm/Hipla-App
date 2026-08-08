@@ -17,7 +17,10 @@ export default async function Page() {
   const supabase = await createClient();
   const [{ data: prestations }, { data: utilisees }] = await Promise.all([
     supabase.from('prestations').select('*').order('ordre'),
-    supabase.from('lignes_document').select('prestation_id'),
+    // Les lignes vivent dans `pieces_lignes` depuis la refonte : cet
+    // écran croyait qu'aucune prestation n'était utilisée, et proposait
+    // donc de les supprimer toutes.
+    supabase.from('pieces_lignes').select('prestation_id'),
   ]);
 
   const idsUtilises = new Set(

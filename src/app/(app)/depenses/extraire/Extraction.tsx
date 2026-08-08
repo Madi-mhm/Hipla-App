@@ -235,13 +235,18 @@ export default function Extraction({
 
     const dep = res as { id: string; numero_piece: string; rapprochement_propose?: string };
 
-    // Le SIRET et le numéro de TVA du fournisseur ne sont pas des
-    // paramètres de la fonction : ils complètent l'écriture après coup.
+    // Le SIRET et le numéro de TVA appartiennent au FOURNISSEUR, pas à
+    // la facture : un fournisseur en a un seul, quel que soit le nombre
+    // de factures qu'il émet. Ils rejoignent donc le tiers.
+    //
+    // Ils étaient écrits dans `depenses`, l'ancienne table — et se
+    // perdaient depuis la refonte sans qu'aucune erreur ne le signale.
     if (doc.extrait?.siret_fournisseur || doc.extrait?.tva_fournisseur) {
-      await supabase.from('depenses').update({
-        siret_fournisseur: doc.extrait?.siret_fournisseur ?? null,
-        tva_fournisseur: doc.extrait?.tva_fournisseur ?? null,
-      }).eq('id', dep.id);
+      await supabase.rpc('completer_tiers', {
+        p_piece: dep.id,
+        p_siret: doc.extrait?.siret_fournisseur ?? null,
+        p_numero_tva: doc.extrait?.tva_fournisseur ?? null,
+      });
     }
 
     // Le justificatif est déjà en main : on le joint sans repasser par l'utilisateur.

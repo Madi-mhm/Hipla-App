@@ -212,10 +212,21 @@ export default function Banque({
     setEnCours(true);
     const supabase = createClient();
 
+    // `detacher_appariement` existe depuis la refonte : elle défait le
+    // lien des DEUX côtés et supprime le règlement associé. La mise à
+    // jour directe de `depenses` ne trouvait plus rien sur une écriture
+    // du registre — elle échouait en silence, et l'écriture restait
+    // marquée comme réglée.
     if (t.depense_id) {
-      await supabase.from('depenses')
-        .update({ transaction_qonto_id: null, paye_le: null })
-        .eq('id', t.depense_id);
+      const { error: eDetach } = await supabase.rpc('detacher_appariement', {
+        p_piece: t.depense_id,
+        p_transaction: t.id,
+      });
+      if (eDetach) {
+        setErreur(`Détachement impossible — ${eDetach.message}`);
+        setEnCours(false);
+        return;
+      }
     }
 
     const { error } = await supabase.from('transactions_qonto').update({
