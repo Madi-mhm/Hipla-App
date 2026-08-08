@@ -17,15 +17,16 @@ export default async function Page() {
   const supabase = await createClient();
 
   const [
-    { data: exercices }, { data: anomalies }, { data: depenses },
-    { data: frais }, { data: commentaires }, { data: taches },
+    { data: exercices }, { data: anomalies }, { data: dossier },
+    { data: commentaires }, { data: taches },
   ] = await Promise.all([
     supabase.from('exercices').select('*').order('date_debut'),
     supabase.from('v_anomalies').select('*').order('date_piece', { ascending: false }),
-    supabase.from('depenses')
-      .select('id, date_depense, montant_ht, montant_ttc, tva_deductible, statut, revu_le'),
-    supabase.from('frais_creation')
-      .select('id, montant_ht, montant_ttc, tva_deductible, statut_reprise, revu_le'),
+    // Une seule lecture, sur le registre. Les deux anciennes tables
+    // additionnaient leurs propres totaux : `depenses` étant vidée par la
+    // bascule, l'espace comptable ne voyait plus que les frais repris et
+    // affichait des chiffres que le tableau de bord contredisait.
+    supabase.rpc('etat_dossier'),
     supabase.from('commentaires')
       .select('*, profils!commentaires_cree_par_fkey(nom_complet)')
       .order('cree_le', { ascending: false }).limit(50),
@@ -40,18 +41,13 @@ export default async function Page() {
     (exercices ?? []).find((e) => aujourdhui >= e.date_debut && aujourdhui <= e.date_fin)
     ?? (exercices ?? [])[0];
 
-  const dep = depenses ?? [];
-  const frs = frais ?? [];
+  const d = (dossier ?? {}) as Record<string, number>;
 
   const chiffres = {
-    chargesHT:
-      dep.filter((d) => d.statut === 'validee').reduce((s, d) => s + Number(d.montant_ht), 0)
-      + frs.filter((f) => f.statut_reprise === 'repris').reduce((s, f) => s + Number(f.montant_ht), 0),
-    tvaDeductible:
-      dep.filter((d) => d.statut === 'validee').reduce((s, d) => s + Number(d.tva_deductible), 0)
-      + frs.filter((f) => f.statut_reprise === 'repris').reduce((s, f) => s + Number(f.tva_deductible), 0),
-    ecrituresTotal: dep.length + frs.length,
-    ecrituresRevues: dep.filter((d) => d.revu_le).length + frs.filter((f) => f.revu_le).length,
+    chargesHT: Number(d.charges_ht ?? 0),
+    tvaDeductible: Number(d.tva_deductible ?? 0),
+    ecrituresTotal: Number(d.ecritures_total ?? 0),
+    ecrituresRevues: Number(d.ecritures_revues ?? 0),
   };
 
   return (

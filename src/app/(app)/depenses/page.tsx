@@ -31,6 +31,7 @@ type Ligne = {
   compte: string | null;
   categorie_libelle: string | null;
   montant_ht: number;
+  montant_tva: number;
   montant_ttc: number;
   tva_comptable: number;
   taux_deductibilite: number;
@@ -82,8 +83,16 @@ export default async function Page() {
   // Un avoir fournisseur va dans l'autre sens : il RETRANCHE. Additionner
   // les montants sans regarder le sens gonflait les charges du double du
   // montant — une remise de 18 € comptée comme une dépense de 18 €.
+  //
+  // Le coût réel d'un achat comprend la TVA qu'on n'a pas pu déduire :
+  // c'est une charge, pas une taxe. Sans ce terme, cet écran annonçait
+  // 453,55 € là où le tableau de bord et le fichier des écritures
+  // disaient 453,63 € — huit centimes, mais deux définitions.
   const signe = (d: Ligne) => (d.sens === 'credit' ? -1 : 1);
-  const totalHT = validees.reduce((s, d) => s + signe(d) * Number(d.montant_ht), 0);
+  const charge = (d: Ligne) =>
+    signe(d) * (Number(d.montant_ht)
+      + Math.max(Number(d.montant_tva) - Math.abs(Number(d.tva_comptable)), 0));
+  const totalHT = validees.reduce((s, d) => s + charge(d), 0);
   const totalTVA = validees.reduce((s, d) => s + Number(d.tva_comptable), 0);
   const avoirs = validees.filter((d) => d.sens === 'credit');
 
@@ -97,8 +106,11 @@ export default async function Page() {
       <div className="content">
         <div className="grid-cards" style={{ marginBottom: '1.25rem' }}>
           <div className="card">
-            <p className="card__title">Total HT validé</p>
+            <p className="card__title">Charges validées</p>
             <p className="amount" style={chiffre}>{money(totalHT)}</p>
+            <p className="muted" style={petit}>
+              Hors taxes, TVA non déductible comprise
+            </p>
           </div>
           <div className="card">
             <p className="card__title">TVA récupérable</p>

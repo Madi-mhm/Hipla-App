@@ -5,6 +5,7 @@ import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import { statutSaisie, type Candidat } from '@/lib/registre';
 import DetailDepense from './DetailDepense';
+import DepotJustificatif from './DepotJustificatif';
 import Commentaires from '@/components/Commentaires';
 import Rapprochement, { type OperationLibre } from '@/components/Rapprochement';
 import type { Categorie, Depense, Commentaire } from '@/lib/types';
@@ -126,6 +127,20 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           peutSupprimer={peut(profil.role, 'depenses', 'delete')}
           peutRevue={peut(profil.role, 'depenses', 'revue')}
           nomRelecteur={relecteur?.nom_complet ?? null}
+        />
+
+        {/*
+          Ce bloc avait été livré puis perdu : une livraison ultérieure est
+          repartie d'une version antérieure du fichier. Sans lui, une pièce
+          validée n'a plus aucun moyen de recevoir sa facture — joindre un
+          document ne change aucun chiffre et doit rester possible.
+        */}
+        <DepotJustificatif
+          pieceId={id}
+          numeroPiece={piece.numero_piece}
+          annulee={piece.etat === 'annulee'}
+          aDesJustificatifs={fichiers.length > 0}
+          peutDeposer={peut(profil.role, 'depenses', 'update')}
         />
 
         <div style={{ marginTop: '1rem' }}>
