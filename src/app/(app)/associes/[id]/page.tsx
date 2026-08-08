@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
+import Reference from '@/components/Reference';
 import Header from '@/components/Header';
 import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
@@ -188,10 +189,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                       <tr key={m.id} style={{ borderBottom: '1px solid var(--g-200)' }}>
                         <td style={td}>{date(m.date_ecriture)}</td>
                         <td style={td} className="mono">
-                          <Link href={m.nature === 'banque' ? '/banque' : `/depenses/${m.id}`}
+                          <Reference id={m.id}
                             style={{ color: 'var(--navy)', fontSize: '.72rem' }}>
                             {m.numero_piece ?? '—'}
-                          </Link>
+                          </Reference>
                         </td>
                         <td style={{ ...td, fontWeight: 500 }}>
                           {m.motif}

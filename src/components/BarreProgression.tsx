@@ -27,6 +27,10 @@ export default function BarreProgression() {
       const href = lien.getAttribute('href');
       if (!href || !href.startsWith('/') || lien.target === '_blank') return;
       if (href === window.location.pathname) return;
+      // Ouvrir une fenêtre n'est pas naviguer : la barre tournerait dans
+      // le vide, puisqu'aucune page ne charge. La fenêtre a son propre
+      // squelette pour dire qu'elle travaille.
+      if (lien.dataset.fenetre === 'oui') return;
       demarrer();
     }
     document.addEventListener('click', surClic);

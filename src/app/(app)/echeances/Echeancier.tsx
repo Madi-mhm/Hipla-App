@@ -14,6 +14,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Reference from '@/components/Reference';
 import { createClient } from '@/lib/supabase/client';
 import { money, dateLong } from '@/lib/format';
 import Alerte from '@/components/Alerte';
@@ -206,7 +207,16 @@ function Bloc({ titre, echeances, couleur, accomplir, peutAccomplir, enCours }: 
 
             <div style={{ flex: 1, minWidth: '16rem' }}>
               <p style={{ fontSize: 'var(--fs-sm)', fontWeight: 500, color: 'var(--g-800)' }}>
-                {e.lien ? (
+                {/*
+                  Une facture ou une dette ouvre son aperçu ; une
+                  obligation déclarative n'est pas une pièce comptable et
+                  reste du texte.
+                */}
+                {e.source === 'facture' || e.source === 'fournisseur' ? (
+                  <Reference id={e.id} style={{ color: 'var(--navy)' }}>
+                    {e.libelle}
+                  </Reference>
+                ) : e.lien ? (
                   <Link href={e.lien} style={{ color: 'var(--navy)' }}>{e.libelle}</Link>
                 ) : e.libelle}
               </p>

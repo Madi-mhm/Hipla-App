@@ -17,7 +17,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import Reference from '@/components/Reference';
 import { createClient } from '@/lib/supabase/client';
 import { money, date } from '@/lib/format';
 import Alerte from '@/components/Alerte';
@@ -149,7 +149,10 @@ export default function Immobilisations({
               <div key={p.id} style={ligne}>
                 <div style={{ flex: 1, minWidth: '18rem' }}>
                   <p style={{ fontSize: 'var(--fs-sm)', fontWeight: 500 }}>
-                    {p.numero_piece} · {p.tiers_libelle} · {money(base)}
+                    <Reference id={p.id} style={{ color: 'var(--navy)' }}>
+                      {p.numero_piece}
+                    </Reference>
+                    {' · '}{p.tiers_libelle} · {money(base)}
                   </p>
                   <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.15rem' }}>
                     {date(p.date_piece)}
@@ -249,10 +252,9 @@ export default function Immobilisations({
                     </p>
                     <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.15rem' }}>
                       {b.pieces?.numero_piece && (
-                        <Link href={`/depenses/${b.piece_id}`}
-                          style={{ color: 'var(--navy)' }}>
+                        <Reference id={b.piece_id} style={{ color: 'var(--navy)' }}>
                           {b.pieces.numero_piece}
-                        </Link>
+                        </Reference>
                       )}
                       {' · '}en service le {date(b.date_mise_en_service)}
                       {' · '}{b.duree_annees} ans

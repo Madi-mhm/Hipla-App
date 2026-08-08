@@ -14,6 +14,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Reference from '@/components/Reference';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { money, dateLong } from '@/lib/format';
@@ -354,9 +355,9 @@ export default function DetailTransaction({
         <div className="card" style={{ marginBottom: '1.25rem', borderLeft: '3px solid var(--success)' }}>
           <p className="card__title">Écriture rattachée</p>
           <p style={{ fontSize: 'var(--fs-sm)' }}>
-            <Link href={`/depenses/${ecriture.id}`} style={{ color: 'var(--navy)', fontWeight: 600 }}>
+            <Reference id={ecriture.id} style={{ color: 'var(--navy)', fontWeight: 600 }}>
               {ecriture.numero_piece ?? 'Sans numéro'}
-            </Link>
+            </Reference>
             {' — '}{ecriture.tiers_libelle}{' · '}{money(Number(ecriture.montant_ttc))}
           </p>
         </div>

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
+import RefAssocie from '@/components/apercu/RefAssocie';
 import Header from '@/components/Header';
 import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
@@ -148,7 +148,7 @@ export default async function Page() {
                 ? (Number(x.capital_souscrit) / capitalTotal) * 100 : 0;
 
               return (
-                <Link key={x.identifiant} href={`/associes/${x.identifiant}`}
+                <RefAssocie key={x.identifiant} identifiant={x.identifiant}
                   className="card" style={{
                     display: 'block', textDecoration: 'none',
                     opacity: x.actif ? 1 : 0.5,
@@ -206,7 +206,7 @@ export default async function Page() {
                       </p>
                     </div>
                   </div>
-                </Link>
+                </RefAssocie>
               );
             })}
           </div>

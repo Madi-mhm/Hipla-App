@@ -16,6 +16,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import Reference from '@/components/Reference';
 import { money, date } from '@/lib/format';
 
 type Bloc = { base: number; tva: number };
@@ -266,9 +267,10 @@ export default function SuiviTva({ suivi }: { suivi: Suivi }) {
                     style={{ borderBottom: '1px solid var(--g-200)' }}>
                     <td style={td}>{date(l.date_exigibilite)}</td>
                     <td style={td} className="mono">
-                      <Link href={l.lien} style={{ color: 'var(--navy)', fontSize: '.72rem' }}>
+                      <Reference id={l.piece_id}
+                        style={{ color: 'var(--navy)', fontSize: '.72rem' }}>
                         {l.numero_piece ?? 'ouvrir'}
-                      </Link>
+                      </Reference>
                     </td>
                     <td style={td}>{l.tiers}</td>
                     <td style={td} className="muted">

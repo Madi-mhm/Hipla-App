@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Reference from '@/components/Reference';
 import { redirect } from 'next/navigation';
 import Header from '@/components/Header';
 import { createClient } from '@/lib/supabase/server';
@@ -253,15 +254,23 @@ function Tableau({ depenses, peutValider }: { depenses: Ligne[]; peutValider: bo
                 opacity: d.statut === 'annulee' ? 0.45 : 1,
               }}>
                 <td style={td} className="mono">
-                  <span style={{ fontSize: '.72rem', color: 'var(--g-600)' }}>
+                  {/*
+                    La référence EST le repère : c'est elle qu'on cherche
+                    des yeux, elle qu'on cite, elle qu'on doit pouvoir
+                    ouvrir. La laisser en texte mort pendant que le nom
+                    du fournisseur était cliquable, c'était l'inverse de
+                    l'usage.
+                  */}
+                  <Reference id={d.id}
+                    style={{ fontSize: '.72rem', color: 'var(--navy)' }}>
                     {d.numero_piece ?? '—'}
-                  </span>
+                  </Reference>
                 </td>
                 <td style={td}>{date(d.date_piece)}</td>
                 <td style={{ ...td, fontWeight: 500 }}>
-                  <Link href={`/depenses/${d.id}`} style={{ color: 'var(--navy)', textDecoration: 'none' }}>
+                  <Reference id={d.id} style={{ color: 'var(--navy)', textDecoration: 'none' }}>
                     {d.tiers_libelle}
-                  </Link>
+                  </Reference>
                   {d.sens === 'credit' && (
                     <span className="badge badge--success" style={{
                       marginLeft: '.4rem', fontSize: '.62rem',
@@ -338,10 +347,10 @@ function Tableau({ depenses, peutValider }: { depenses: Ligne[]; peutValider: bo
                   <span className={`badge ${banque.classe}`}>{banque.texte}</span>
                 </td>
                 <td style={{ ...td, textAlign: 'right' }}>
-                  <Link href={`/depenses/${d.id}`} className="btn btn--ghost"
+                  <Reference id={d.id} className="btn btn--ghost"
                     style={{ minHeight: 28, padding: '.15rem .6rem', fontSize: '.7rem' }}>
                     Ouvrir
-                  </Link>
+                  </Reference>
                 </td>
                 {peutValider && (
                   <td style={{ ...td, textAlign: 'right' }}>

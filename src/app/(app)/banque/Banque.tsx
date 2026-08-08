@@ -14,6 +14,8 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import Reference from '@/components/Reference';
+import RefBanque from '@/components/apercu/RefBanque';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { compresser, poids } from '@/lib/compression';
@@ -428,10 +430,10 @@ export default function Banque({
                       {/* Sans ce lien, le détail d'une opération — son
                           identifiant Qonto, son justificatif, ses candidats
                           au rapprochement — restait inaccessible. */}
-                      <Link href={`/banque/${t.id}`}
+                      <RefBanque id={t.id}
                         style={{ fontSize: '.72rem', color: 'var(--navy)', fontWeight: 600 }}>
                         {t.numero_piece ?? 'Ouvrir'}
-                      </Link>
+                      </RefBanque>
                     </td>
                     <td style={td}>{date(t.date_operation)}</td>
                     <td style={{ ...td, fontWeight: 500 }}>
@@ -448,11 +450,11 @@ export default function Banque({
                       </span>
                     </td>
                     <td style={{ ...td, textAlign: 'right' }} className="col-secondaire">
-                      {t.depenses ? (
-                        <Link href={`/depenses/${t.depense_id}`} className="mono"
+                      {t.depenses && t.depense_id ? (
+                        <Reference id={t.depense_id} className="mono"
                           style={{ fontSize: '.72rem', color: 'var(--navy)' }}>
                           {t.depenses.numero_piece}
-                        </Link>
+                        </Reference>
                       ) : '—'}
                       {t.rattachement_auto && (
                         <span className="muted" style={{ display: 'block', fontSize: '.66rem' }}>
@@ -482,10 +484,10 @@ export default function Banque({
                               fabrique des écritures fausses ne doit pas être le
                               plus accessible — on conduit à l'écran complet.
                             */}
-                            <Link href={`/banque/${t.id}`} className="btn btn--ghost"
+                            <RefBanque id={t.id} className="btn btn--ghost"
                               style={{ minHeight: 26, padding: '.1rem .55rem', fontSize: '.7rem' }}>
                               Affecter
-                            </Link>
+                            </RefBanque>
                             <button onClick={() => setAEcarter(t)} className="btn btn--ghost"
                               style={{ minHeight: 26, padding: '.1rem .55rem', fontSize: '.7rem', color: 'var(--g-500)' }}>
                               Écarter

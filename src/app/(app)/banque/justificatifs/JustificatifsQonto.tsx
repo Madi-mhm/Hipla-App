@@ -14,6 +14,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Reference from '@/components/Reference';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { money, date } from '@/lib/format';
@@ -300,9 +301,9 @@ export default function JustificatifsQonto({ lignes, categories, peutValider }: 
                         disabled={enCours} className="btn btn--gold">
                         Rattacher à {corr?.numero_piece}
                       </button>
-                      <Link href={`/depenses/${corr?.depense_id}`} className="btn btn--ghost">
+                      <Reference id={corr!.depense_id!} className="btn btn--ghost">
                         Voir la dépense
-                      </Link>
+                      </Reference>
                     </div>
                   </div>
                 )}

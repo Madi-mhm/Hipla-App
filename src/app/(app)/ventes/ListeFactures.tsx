@@ -13,6 +13,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import Reference from '@/components/Reference';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { money, date, daysUntil } from '@/lib/format';
@@ -285,9 +286,10 @@ export default function ListeFactures({
                       opacity: f.statut === 'annulee' ? 0.45 : 1,
                     }}>
                       <td style={td} className="mono">
-                        <span style={{ fontSize: '.72rem', color: 'var(--navy)', fontWeight: 600 }}>
+                        <Reference id={f.id}
+                          style={{ fontSize: '.72rem', color: 'var(--navy)', fontWeight: 600 }}>
                           {f.numero_piece ?? '—'}
-                        </span>
+                        </Reference>
                         {f.nature !== 'facture' && (
                           <span className="muted" style={{ display: 'block', fontSize: '.66rem' }}>
                             {LIBELLE_NATURE_FACTURE[f.nature]}
@@ -330,10 +332,10 @@ export default function ListeFactures({
                         )}
                       </td>
                       <td style={{ ...td, textAlign: 'right' }}>
-                        <Link href={`/ventes/${f.id}`} className="btn btn--ghost"
+                        <Reference id={f.id} className="btn btn--ghost"
                           style={{ minHeight: 28, padding: '.15rem .6rem', fontSize: '.7rem' }}>
                           Ouvrir
-                        </Link>
+                        </Reference>
                       </td>
                     </tr>
                   );

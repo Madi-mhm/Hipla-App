@@ -11,6 +11,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Reference from '@/components/Reference';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { money, date, dateLong, daysUntil } from '@/lib/format';
@@ -192,10 +193,10 @@ export default function EspaceComptable({
                           <td style={td}>{a.tiers}</td>
                           <td style={{ ...td, textAlign: 'right' }}>
                             {a.source === 'depense' && (
-                              <Link href={`/depenses/${a.id}`} className="btn btn--ghost"
+                              <Reference id={a.id} className="btn btn--ghost"
                                 style={{ minHeight: 26, padding: '.1rem .55rem', fontSize: '.7rem' }}>
                                 Ouvrir
-                              </Link>
+                              </Reference>
                             )}
                           </td>
                         </tr>

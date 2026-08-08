@@ -17,6 +17,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import RefBanque from '@/components/apercu/RefBanque';
+import Reference from '@/components/Reference';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { money, date } from '@/lib/format';
@@ -158,8 +160,8 @@ export default function SeanceHebdo({ seance }: { seance: Seance }) {
                 )}
               </div>
               <div style={{ display: 'flex', gap: '.4rem' }}>
-                <Link href={`/banque/${p.transaction_id}`} className="btn btn--ghost"
-                  style={petitBouton}>Examiner</Link>
+                <RefBanque id={p.transaction_id} className="btn btn--ghost"
+                  style={petitBouton}>Examiner</RefBanque>
                 <button onClick={() => confirmer(p.piece_id, p.transaction_id)}
                   disabled={enCours !== null} className="btn btn--gold" style={petitBouton}>
                   Confirmer
@@ -200,9 +202,9 @@ export default function SeanceHebdo({ seance }: { seance: Seance }) {
                   {t.regle?.libelle && ` · règle « ${t.regle.libelle} »`}
                 </p>
               </div>
-              <Link href={`/banque/${t.id}`} className="btn btn--gold" style={petitBouton}>
+              <RefBanque id={t.id} className="btn btn--gold" style={petitBouton}>
                 Affecter
-              </Link>
+              </RefBanque>
             </div>
           ))}
         </div>
@@ -239,8 +241,8 @@ export default function SeanceHebdo({ seance }: { seance: Seance }) {
                 )}
               </div>
               <div style={{ display: 'flex', gap: '.4rem' }}>
-                <Link href={`/depenses/${p.id}`} className="btn btn--ghost"
-                  style={petitBouton}>Examiner</Link>
+                <Reference id={p.id} className="btn btn--ghost"
+                  style={petitBouton}>Examiner</Reference>
                 <button onClick={() => valider(p.id)} disabled={enCours !== null}
                   className="btn btn--gold" style={petitBouton}>
                   Valider
@@ -261,7 +263,10 @@ export default function SeanceHebdo({ seance }: { seance: Seance }) {
             <div key={`${a.type}-${a.id}`} style={ligne}>
               <div style={{ flex: 1, minWidth: '18rem' }}>
                 <p style={{ fontSize: 'var(--fs-sm)', fontWeight: 500 }}>
-                  {a.numero_piece ?? 'Sans numéro'} · {a.tiers} ·{' '}
+                  <Reference id={a.id} style={{ color: 'var(--navy)' }}>
+                    {a.numero_piece ?? 'Sans numéro'}
+                  </Reference>
+                  {' · '}{a.tiers} ·{' '}
                   {money(Number(a.montant_ttc))}
                 </p>
                 <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.15rem' }}>

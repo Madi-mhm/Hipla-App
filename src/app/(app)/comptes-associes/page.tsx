@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import Reference from '@/components/Reference';
 import Header from '@/components/Header';
 import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
@@ -170,12 +171,10 @@ export default async function Page() {
                       <tr key={x.id} style={{ borderBottom: '1px solid var(--g-200)' }}>
                         <td style={td}>{date(x.date_ecriture)}</td>
                         <td style={td} className="mono">
-                          <Link
-                            href={x.nature === 'banque'
-                              ? `/banque` : `/depenses/${x.id}`}
+                          <Reference id={x.id}
                             style={{ color: 'var(--navy)', fontSize: '.72rem' }}>
                             {x.numero_piece ?? '—'}
-                          </Link>
+                          </Reference>
                         </td>
                         <td style={td} className="muted">{x.associe}</td>
                         <td style={{ ...td, fontWeight: 500 }}>
