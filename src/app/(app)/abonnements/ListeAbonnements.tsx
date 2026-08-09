@@ -14,6 +14,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import Reference from '@/components/Reference';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { money, date, dateLong, daysUntil } from '@/lib/format';
@@ -585,9 +586,10 @@ function Bloc({
                   opacity: a.statut === 'resilie' ? 0.5 : 1,
                 }}>
                   <td style={td} className="mono">
-                    <span style={{ fontSize: '.72rem', color: 'var(--g-600)' }}>
-                      {a.numero_piece ?? '—'}
-                    </span>
+                    <Reference id={a.id}
+                      style={{ fontSize: '.72rem', color: 'var(--navy)' }}>
+                        {a.numero_piece ?? '—'}
+                      </Reference>
                   </td>
                   <td style={{ ...td, fontWeight: 500 }}>
                     {a.nom}

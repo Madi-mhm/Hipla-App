@@ -50,6 +50,14 @@ type Apercu = {
   justificatif_regle: boolean;
   motif_exemption: string | null;
   decision_manuelle: boolean;
+  relances: Array<{
+    id: string; degre: string; envoyee_le: string;
+    reste_du: number; jours_retard: number; moyen: string | null;
+  }>;
+  relances_envoyees: number;
+  derniere_relance: string | null;
+  relance_possible: boolean;
+  degre_suggere: string | null;
   banque: { numero_piece: string; date_operation: string; libelle: string; montant: number } | null;
   reglements: Array<{ date: string; montant: number; moyen: string }>;
   lien: string;
@@ -61,6 +69,12 @@ const ETATS: Record<string, { libelle: string; classe: string }> = {
   validee:   { libelle: 'Validée', classe: 'badge--success' },
   rejetee:   { libelle: 'Rejetée', classe: 'badge--danger' },
   annulee:   { libelle: 'Annulée', classe: 'badge--neutral' },
+};
+
+const DEGRES: Record<string, string> = {
+  rappel: 'Rappel d\u2019échéance',
+  relance: 'Relance',
+  mise_en_demeure: 'Mise en demeure',
 };
 
 const NATURES: Record<string, string> = {
@@ -245,11 +259,22 @@ function Contenu({ a, onFermer, onRecharger }: {
         {a.banque ? (
           <Ligne cle="Opération bancaire"
             valeur={`${a.banque.numero_piece} · ${date(a.banque.date_operation)}`} />
-        ) : a.banque_manquante ? (
+        ) : a.banque_manquante && a.nature !== 'vente' && a.nature !== 'avoir' ? (
+          /*
+            Une VENTE attend son encaissement : l'absence d'opération
+            bancaire est le cours normal des choses, pas une anomalie.
+            Un achat, lui, est payé avant d'être saisi.
+          */
           <Ligne cle="Banque" valeur="Aucune opération rattachée" alerte />
         ) : null}
       </div>
 
+      {/*
+        Une facture de VENTE est elle-même le justificatif : c'est nous
+        qui l'émettons. Lui en réclamer un revient à demander la preuve
+        de ce qu'on vient d'écrire.
+      */}
+      {a.nature !== 'vente' && a.nature !== 'avoir' && (
       <Justificatifs
         pieceId={a.id}
         liste={a.justificatifs ?? []}
@@ -263,6 +288,85 @@ function Contenu({ a, onFermer, onRecharger }: {
         decisionManuelle={a.decision_manuelle}
         nature={a.nature}
       />
+      )}
+
+      {/* ---- Ce qui a été réclamé ---- */}
+      {a.nature === 'vente' && (a.relances?.length > 0 || Number(a.reste_du) > 0.005) && (
+        <div style={{ marginTop: '1rem' }}>
+          <p style={etiquette}>
+            Relances{a.relances?.length > 0 && ` — ${a.relances.length}`}
+          </p>
+
+          {a.relances?.length > 0 ? (
+            a.relances.map((r) => (
+              <div key={r.id} style={{
+                display: 'flex', justifyContent: 'space-between',
+                gap: '1rem', padding: '.3rem 0', fontSize: 'var(--fs-sm)',
+              }}>
+                <span>
+                  {DEGRES[r.degre] ?? r.degre}
+                  {r.moyen && <span className="muted"> · {r.moyen}</span>}
+                </span>
+                <span className="muted mono" style={{ fontSize: '.7rem' }}>
+                  {dateLong(r.envoyee_le)} · {money(Number(r.reste_du))}
+                </span>
+              </div>
+            ))
+          ) : (
+            <p className="muted" style={{ fontSize: 'var(--fs-sm)' }}>
+              Aucune relance envoyée.
+            </p>
+          )}
+
+          {/*
+            Le degré ne se choisit pas : il se déduit du retard. Envoyer
+            une mise en demeure pour trois jours coûte un client ; un
+            rappel poli après trois mois coûte une créance.
+          */}
+          {a.relance_possible && a.degre_suggere && (
+            <a href={`/api/ventes/${a.id}/relance`} target="_blank" rel="noopener"
+              className="btn btn--ghost" data-fenetre="oui"
+              style={{
+                display: 'inline-block', marginTop: '.5rem',
+                minHeight: 28, padding: '.15rem .7rem', fontSize: '.72rem',
+              }}>
+              Préparer {(DEGRES[a.degre_suggere] ?? '').toLowerCase()}
+            </a>
+          )}
+          {!a.relance_possible && a.derniere_relance && Number(a.reste_du) > 0.005 && (
+            <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.4rem' }}>
+              Prochaine relance possible à partir du{' '}
+              {dateLong(new Date(new Date(a.derniere_relance).getTime()
+                + 8 * 86400000).toISOString().slice(0, 10))}.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/*
+        La facture n'était téléchargeable que depuis sa page complète.
+        Pour la consulter ou l'envoyer, il fallait donc quitter la liste
+        — alors que c'est le geste le plus fréquent.
+      */}
+      {a.nature === 'vente' && a.etat === 'validee' && (
+        <div style={{
+          display: 'flex', gap: '.5rem', marginTop: '1rem', flexWrap: 'wrap',
+          paddingTop: '.8rem', borderTop: '1px solid var(--g-200)',
+        }}>
+          <a href={`/api/factures/${a.id}/pdf`} target="_blank" rel="noopener"
+            className="btn btn--ghost" data-fenetre="oui"
+            style={{ minHeight: 30, padding: '.2rem .8rem', fontSize: '.74rem' }}>
+            Télécharger la facture
+          </a>
+          {/*
+            Le courrier de relance vit dans le bloc « Relances », qui
+            connaît le délai de huit jours et le degré appelé par le
+            retard. Un second bouton ici appliquait une règle différente
+            — le reste dû seulement — et proposait de relancer une
+            facture non échue.
+          */}
+        </div>
+      )}
 
       <PiedApercu lien={a.lien} onFermer={onFermer} />
     </>

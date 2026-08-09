@@ -13,6 +13,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import Reference from '@/components/Reference';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { depuisTTC, tvaRecuperable } from '@/lib/comptabilite';
@@ -338,9 +339,10 @@ function Bloc({
                   opacity: f.statut_reprise === 'rejete' ? 0.45 : 1,
                 }}>
                   <td style={td} className="mono">
-                    <span style={{ fontSize: '.72rem', color: 'var(--g-600)' }}>
-                      {f.numero_piece ?? '—'}
-                    </span>
+                    <Reference id={f.id}
+                      style={{ fontSize: '.72rem', color: 'var(--navy)' }}>
+                        {f.numero_piece ?? '—'}
+                      </Reference>
                   </td>
                   <td style={td}>{date(f.date_engagement)}</td>
                   <td style={{ ...td, fontWeight: 500 }}>

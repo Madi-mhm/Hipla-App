@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Reference from '@/components/Reference';
 import { redirect } from 'next/navigation';
 import Header from '@/components/Header';
 import { createClient } from '@/lib/supabase/server';
@@ -155,9 +156,10 @@ function Tableau({ lignes, peutValider }: { lignes: Deplacement[]; peutValider: 
             opacity: d.statut === 'annulee' ? 0.45 : 1,
           }}>
               <td style={td} className="mono">
-                <span style={{ fontSize: '.72rem', color: 'var(--g-600)' }}>
-                  {d.numero_piece ?? '—'}
-                </span>
+                <Reference id={d.id}
+                  style={{ fontSize: '.72rem', color: 'var(--navy)' }}>
+                    {d.numero_piece ?? '—'}
+                  </Reference>
               </td>
               <td style={td}>{date(d.date_trajet)}</td>
               <td style={{ ...td, fontWeight: 500 }}>

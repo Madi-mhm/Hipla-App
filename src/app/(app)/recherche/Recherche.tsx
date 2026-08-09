@@ -10,6 +10,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import Reference from '@/components/Reference';
 import Link from 'next/link';
 import { money, date } from '@/lib/format';
 import styles from './recherche.module.css';
@@ -190,9 +191,21 @@ export default function Recherche({ pieces }: { pieces: Piece[] }) {
                 {resultats.slice(0, 200).map((p) => (
                   <tr key={`${p.nature}-${p.id}`} style={{ borderBottom: '1px solid var(--g-200)' }}>
                     <td style={td} className="mono">
-                      <span style={{ fontSize: '.74rem', color: 'var(--navy)', fontWeight: 600 }}>
-                        {p.numero ? surligner(p.numero) : '—'}
-                      </span>
+                      {/*
+                        Un déplacement n'est pas une pièce comptable :
+                        l'aperçu ne saurait qu'en faire tant que les
+                        indemnités ne sont pas constatées.
+                      */}
+                      {p.numero && p.nature !== 'deplacement' ? (
+                        <Reference id={p.id}
+                          style={{ fontSize: '.74rem', color: 'var(--navy)', fontWeight: 600 }}>
+                          {surligner(p.numero)}
+                        </Reference>
+                      ) : (
+                        <span style={{ fontSize: '.74rem', color: 'var(--navy)', fontWeight: 600 }}>
+                          {p.numero ? surligner(p.numero) : '—'}
+                        </span>
+                      )}
                     </td>
                     <td style={td}>{date(p.date)}</td>
                     <td style={{ ...td, fontWeight: 500 }}>
