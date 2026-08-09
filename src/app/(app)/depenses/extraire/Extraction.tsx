@@ -254,8 +254,13 @@ export default function Extraction({
     const { error: eUp } = await supabase.storage
       .from('justificatifs').upload(chemin, doc.fichier);
     if (!eUp) {
-      await supabase.from('justificatifs').insert({
-        depense_id: dep.id,
+      await supabase.from('justificatifs').insert({        // `piece_id` directement. La colonne `depense_id` n'existe plus
+        // que pour un déclencheur de compatibilité, `trg_rerouter_justificatif`,
+        // qui la réécrit en `piece_id` — et qui disparaîtra avec la table
+        // `depenses`. Écrire la bonne colonne dès maintenant permet de
+        // retirer l'ancienne table sans casser le dépôt de justificatifs.
+
+        piece_id: dep.id,
         chemin,
         nom_original: doc.fichier.name,
         type_mime: doc.fichier.type,
