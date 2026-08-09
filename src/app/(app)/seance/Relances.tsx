@@ -25,6 +25,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { money, date, dateLong } from '@/lib/format';
 import Alerte from '@/components/Alerte';
+import Reference from '@/components/Reference';
 
 export type Relance = {
   id: string; numero_piece: string | null; tiers: string;
@@ -132,11 +133,14 @@ export default function Relances({ lignes, peutRelancer }: {
               <div style={{ flex: 1, minWidth: '17rem' }}>
                 <p style={{ fontSize: 'var(--fs-sm)', fontWeight: 500 }}>
                   {l.tiers}
-                  <span className="muted mono" style={{
+                  {/* Le numéro était du texte : seul endroit de la séance
+                      où une pièce s'affichait sans pouvoir s'ouvrir. */}
+                  <Reference id={l.id} className="mono" style={{
                     marginLeft: '.5rem', fontSize: '.7rem', fontWeight: 400,
+                    color: 'var(--navy)',
                   }}>
-                    {l.numero_piece}
-                  </span>
+                    {l.numero_piece ?? 'Ouvrir'}
+                  </Reference>
                 </p>
                 <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.15rem' }}>
                   {l.jours_retard > 0

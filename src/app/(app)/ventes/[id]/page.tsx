@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import type { Piece, LignePiece, Tiers, Reglement } from '@/lib/registre';
-import DetailFacture from './DetailFacture';
+import DetailFacture, { type DevisRattachable } from './DetailFacture';
 import type { Prestation, TransactionQonto } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -40,6 +40,25 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         .order('date_reglement'),
     ]);
 
+  /* Le devis d'où vient cette facture.
+     Le lien n'existait que dans un sens : le devis pointait sa facture,
+     la facture ignorait son devis. Or c'est de la facture qu'on part
+     quand un client conteste un prix — « c'était bien ce qui avait été
+     chiffré ? ». La question n'avait pas de réponse à l'écran. */
+  const { data: devisOrigine } = await supabase
+    .from('pieces')
+    .select('id, numero_piece, date_piece, montant_ttc')
+    .eq('facture_issue_id', id)
+    .maybeSingle();
+
+  /* Les devis du même client encore libres.
+     `accepter_devis` n'est pas le seul chemin : on chiffre, le client
+     accepte au téléphone, on fait le travail et l'on facture directement.
+     Les deux documents existent alors sans que rien ne les relie. */
+  const { data: rattachables } = devisOrigine
+    ? { data: [] }
+    : await supabase.rpc('devis_rattachables', { p_facture: id });
+
   return (
     <>
       <Header
@@ -53,6 +72,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           piece={piece as Piece & { tiers: Tiers | null }}
           lignes={(lignes ?? []) as LignePiece[]}
           reglements={(reglements ?? []) as Reglement[]}
+          devisOrigine={devisOrigine ?? null}
+          devisRattachables={(rattachables ?? []) as DevisRattachable[]}
           prestations={(prestations ?? []) as Prestation[]}
           entreprise={entreprise}
           creditsLibres={(credits ?? []) as TransactionQonto[]}

@@ -30,6 +30,14 @@ export type Seance = {
     libelle: string; montant: number; sens: string;
     a_justificatif: boolean;
     regle: { libelle?: string; source?: string } | null;
+    /* Le moteur produit quatre décisions ; la séance n'en lisait que deux.
+       Les opérations à candidat faible tombaient ici comme s'il n'avait
+       aucun avis — alors qu'il en avait un, simplement pas assez sûr pour
+       le proposer. */
+    candidat_faible: {
+      piece_id: string; piece: string | null; tiers: string;
+      score: number; motifs: string[];
+    } | null;
   }>;
   a_confirmer: Array<{
     transaction_id: string; operation: string | null; date_operation: string;
@@ -52,15 +60,12 @@ export type Seance = {
   close: boolean;
 };
 
-export default function SeanceHebdo(
-  { seance, compteCourant }: { seance: Seance; compteCourant: number },
-) {
+export default function SeanceHebdo({ seance }: { seance: Seance }) {
   const router = useRouter();
   const [enCours, setEnCours] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
 
   const c = seance.compteurs;
-  const ch = seance.chiffres;
 
   async function confirmer(pieceId: string, transactionId: string) {
     setEnCours(transactionId);
@@ -208,6 +213,21 @@ export default function SeanceHebdo(
                   {t.a_justificatif && ' · justificatif joint dans Qonto'}
                   {t.regle?.libelle && ` · règle « ${t.regle.libelle} »`}
                 </p>
+                {t.candidat_faible && (
+                  <p className="muted" style={{
+                    fontSize: 'var(--fs-xs)', marginTop: '.25rem', lineHeight: 1.45,
+                  }}>
+                    Piste faible :{' '}
+                    <Reference id={t.candidat_faible.piece_id} className="mono"
+                      style={{ color: 'var(--navy)', fontWeight: 600 }}>
+                      {t.candidat_faible.piece ?? 'écriture'}
+                    </Reference>
+                    {' '}· {t.candidat_faible.tiers} · score {t.candidat_faible.score}
+                    {Array.isArray(t.candidat_faible.motifs)
+                      && t.candidat_faible.motifs.length > 0
+                      && ` · ${t.candidat_faible.motifs.join(', ')}`}
+                  </p>
+                )}
               </div>
               <RefBanque id={t.id} className="btn btn--gold btn--sm" style={petitBouton}>
                 Affecter
@@ -314,60 +334,41 @@ export default function SeanceHebdo(
         </div>
       )}
 
-      {/* ---------- 5. Les chiffres ---------- */}
+      {/* ---------- 5. Où en est l'entreprise ---------- */}
+      {/*
+        Huit chiffres figuraient ici — encaissé, charges, reste à encaisser,
+        solde bancaire, TVA collectée, déductible, solde, compte courant — et
+        les huit figurent aussi au tableau de bord. Deux écrans annonçant les
+        mêmes montants, c'est deux occasions de diverger, et c'est déjà arrivé :
+        les charges du mois se calculaient ici sans tenir compte du sens, si
+        bien qu'un avoir fournisseur les augmentait.
+
+        La séance est une file d'attente : chaque bloc porte un bouton, on le
+        traite, il disparaît. Les chiffres ne se traitent pas — ils se lisent.
+        Ils ont leur place, et une seule.
+      */}
       <div className="card">
-        <p className="card__title">Les chiffres</p>
-
-        <div className="grid-cards" style={{ marginTop: '.8rem' }}>
-          <Chiffre titre="Encaissé ce mois" valeur={ch.encaisse_mois}
-            note="Ce qui compte pour la TVA sur les services" />
-          <Chiffre titre="Charges du mois" valeur={ch.charges_mois} note="Hors taxes" />
-          <Chiffre titre="Reste à encaisser" valeur={ch.a_encaisser}
-            note="Factures émises non réglées" />
-          <Chiffre titre="Solde bancaire" valeur={ch.solde_banque}
-            note="Reconstitué depuis les opérations" />
-        </div>
-
-        <div className="grid-cards" style={{ marginTop: '1rem' }}>
-          <Chiffre titre="TVA collectée" valeur={ch.tva_collectee}
-            note="Exigible, sur encaissements" />
-          <Chiffre titre="TVA déductible" valeur={ch.tva_deductible}
-            note="Exigible, sur paiements" />
-          <Chiffre titre="Solde de TVA" valeur={ch.tva_collectee - ch.tva_deductible}
-            note={ch.tva_collectee - ch.tva_deductible >= 0 ? 'À payer' : 'À récupérer'} />
-          {/* Valeur lue depuis `solde_compte_courant()`, et non depuis
-              `ch.compte_courant` : ce dernier ne soustrait pas les
-              remboursements et ne connaît pas les apports. */}
-          <Chiffre titre="Compte courant d'associé" valeur={compteCourant}
-            note="Avances et apports, moins les remboursements" />
-        </div>
-
+        <p className="card__title">Où en est l'entreprise</p>
         <p className="muted" style={{
-          fontSize: 'var(--fs-xs)', marginTop: '1rem', lineHeight: 1.5, maxWidth: '68ch',
+          fontSize: 'var(--fs-sm)', lineHeight: 1.55, maxWidth: '68ch',
         }}>
-          Les montants de TVA sont cumulés depuis l&apos;ouverture de
-          l&apos;exercice, sur les faits générateurs — un encaissement pour une
-          vente de services, un paiement pour un achat de services. La
-          déclaration les reprendra par période.
+          Résultat de l&apos;exercice, charges par poste, TVA, compte courant et
+          les sept contrôles de cohérence : le tableau de bord les tient à jour.
+          Cette page-ci ne garde que ce qui attend une décision de votre part.
         </p>
+        <div style={{ marginTop: '.9rem', display: 'flex', gap: '.6rem', flexWrap: 'wrap' }}>
+          <Link href="/tableau-de-bord" className="btn btn--ghost">
+            Tableau de bord
+          </Link>
+          <Link href="/tva" className="btn btn--ghost">Suivi de TVA</Link>
+          <Link href="/banque" className="btn btn--ghost">Banque</Link>
+        </div>
       </div>
+
     </>
   );
 }
 
-function Chiffre({ titre, valeur, note }: { titre: string; valeur: number; note: string }) {
-  return (
-    <div className="card">
-      <p className="card__title">{titre}</p>
-      <p className="amount" style={{
-        fontSize: '1.3rem', fontFamily: 'var(--display)', fontWeight: 600,
-      }}>
-        {money(Number(valeur ?? 0))}
-      </p>
-      <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.3rem' }}>{note}</p>
-    </div>
-  );
-}
 
 const ligne: React.CSSProperties = {
   display: 'flex', justifyContent: 'space-between', alignItems: 'center',

@@ -34,12 +34,9 @@ export default async function Page() {
       .select('*, assigne:profils!taches_assignee_a_fkey(nom_complet), auteur:profils!taches_cree_par_fkey(nom_complet)')
       .neq('statut', 'annulee')
       .order('echeance', { ascending: true, nullsFirst: false }),
-    // Les échéances déclaratives venaient d'un tableau écrit en dur dans
-    // `lib/echeances.ts`, qui en comptait quatre. La table `obligations`
-    // en porte six, dont les deux plus proches — plateforme agréée au
-    // 1er septembre 2026, ratification des frais de création au 30 —
-    // absentes du tableau. L'écran fait pour surveiller les échéances
-    // était le seul à ne pas les voir.
+    // Les échéances : de quoi afficher un compte et la plus proche.
+    // Le tableau complet, et le pointage, vivent sur /echeances — les
+    // répéter ici n'apportait rien qu'une occasion de diverger.
     supabase.from('v_echeances')
       .select('id, echeance, libelle, detail, nature, accomplie')
       .eq('source', 'obligation')

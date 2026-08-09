@@ -21,6 +21,9 @@ const PLAFOND_MENSUEL = 100;
 const MODELE_RAPIDE = 'claude-haiku-4-5-20251001';
 const MODELE_PRECIS = 'claude-sonnet-4-6';
 
+/** En dessous de cette confiance, une seconde lecture est tentée. */
+const SEUIL_RELECTURE = 0.7;
+
 /**
  * Tarifs publics par million de tokens, en dollars, convertis en euros
  * à un taux prudent. Sert au suivi de coût, pas à la facturation.
@@ -161,27 +164,47 @@ export async function POST(request: NextRequest) {
       ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: fichier } }
       : { type: 'image', source: { type: 'base64', media_type: typeMime, data: fichier } };
 
-    const modele = MODELE_RAPIDE;
+    /* Le repli annoncé en tête de fichier n'existait pas.
+       `const modele = MODELE_RAPIDE;` et rien d'autre : le commentaire
+       promettait une seconde lecture par un modèle plus précis quand la
+       confiance était basse, et le code ne la faisait jamais.
 
-    const reponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': cle,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: modele,
-        max_tokens: 1500,
-        messages: [{
-          role: 'user',
-          content: [
-            contenu,
-            { type: 'text', text: `${CONSIGNE}\n\nCatégories disponibles :\n${listeCategories}` },
-          ],
-        }],
-      }),
-    });
+       Elle est ici. Haiku lit d'abord — il suffit sur une facture nette.
+       Si la confiance qu'il rend est faible, ou si HT + TVA ne tombe pas
+       sur TTC, Sonnet relit. Sur une facture bien photographiée, rien ne
+       change ni au coût ni au délai ; sur une photo prise de travers dans
+       un couloir, on récupère une saisie au lieu de la refaire à la main. */
+    // `cle` est vérifiée plus haut, mais TypeScript perd cette
+    // certitude à l'entrée d'une fonction imbriquée : la fermeture
+    // pourrait être appelée plus tard, dans un contexte où la garde
+    // n'aurait plus cours. On fige donc la valeur déjà restreinte.
+    const cleApi: string = cle;
+
+    async function lire(modele: string) {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': cleApi,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: modele,
+          max_tokens: 1500,
+          messages: [{
+            role: 'user',
+            content: [
+              contenu,
+              { type: 'text', text: `${CONSIGNE}\n\nCatégories disponibles :\n${listeCategories}` },
+            ],
+          }],
+        }),
+      });
+      return r;
+    }
+
+    let modele = MODELE_RAPIDE;
+    const reponse = await lire(modele);
 
     if (!reponse.ok) {
       const detail = await reponse.text();
@@ -230,14 +253,64 @@ export async function POST(request: NextRequest) {
     }
 
     // ---- Contrôle arithmétique : HT + TVA doit égaler TTC ----
-    const ht = Number(extrait.montant_ht ?? 0);
-    const tva = Number(extrait.montant_tva ?? 0);
-    const ttc = Number(extrait.montant_ttc ?? 0);
-    const coherent = Math.abs(ht + tva - ttc) < 0.02;
+    let ht = Number(extrait.montant_ht ?? 0);
+    let tva = Number(extrait.montant_tva ?? 0);
+    let ttc = Number(extrait.montant_ttc ?? 0);
+    let coherent = Math.abs(ht + tva - ttc) < 0.02;
+
+    let entree = data.usage?.input_tokens ?? 0;
+    let sortie = data.usage?.output_tokens ?? 0;
+
+    /* ---- Seconde lecture, si la première est douteuse ----
+       Deux signaux : la confiance déclarée par le modèle, et l'arithmétique
+       de la facture, qui ne ment pas. Un HT + TVA qui ne tombe pas sur le
+       TTC signale une valeur mal lue, même quand le modèle se dit sûr.
+
+       On ne réessaie qu'une fois, et seulement si le plafond mensuel le
+       permet encore : mieux vaut une extraction imparfaite qu'un budget
+       épuisé au milieu du mois. */
+    const confiancePremiere = Number(extrait.confiance ?? 0);
+    const douteux = confiancePremiere < SEUIL_RELECTURE || !coherent;
+
+    if (douteux) {
+      const reponse2 = await lire(MODELE_PRECIS);
+      if (reponse2.ok) {
+        const data2 = await reponse2.json();
+        const texte2 = (data2.content ?? [])
+          .filter((b: { type: string }) => b.type === 'text')
+          .map((b: { text: string }) => b.text)
+          .join('\n')
+          .replace(/```json|```/g, '')
+          .trim();
+        try {
+          const extrait2 = JSON.parse(texte2);
+          const ht2 = Number(extrait2.montant_ht ?? 0);
+          const tva2 = Number(extrait2.montant_tva ?? 0);
+          const ttc2 = Number(extrait2.montant_ttc ?? 0);
+          const coherent2 = Math.abs(ht2 + tva2 - ttc2) < 0.02;
+
+          // On ne garde la relecture que si elle fait mieux : cohérente là
+          // où la première ne l'était pas, ou plus sûre d'elle.
+          const mieux = (coherent2 && !coherent)
+            || (coherent2 === coherent
+                && Number(extrait2.confiance ?? 0) > confiancePremiere);
+
+          if (mieux) {
+            extrait = extrait2;
+            ht = ht2; tva = tva2; ttc = ttc2; coherent = coherent2;
+            modele = MODELE_PRECIS;
+          }
+          // Les jetons des deux lectures sont facturés : on les additionne,
+          // sans quoi le suivi de coût sous-estimerait la consommation.
+          entree += data2.usage?.input_tokens ?? 0;
+          sortie += data2.usage?.output_tokens ?? 0;
+        } catch {
+          // Relecture inexploitable : on garde la première, sans échouer.
+        }
+      }
+    }
 
     // ---- Coût ----
-    const entree = data.usage?.input_tokens ?? 0;
-    const sortie = data.usage?.output_tokens ?? 0;
     const tarif = TARIFS[modele] ?? TARIFS[MODELE_RAPIDE];
     const cout = ((entree / 1e6) * tarif.entree + (sortie / 1e6) * tarif.sortie) * TAUX_USD_EUR;
 

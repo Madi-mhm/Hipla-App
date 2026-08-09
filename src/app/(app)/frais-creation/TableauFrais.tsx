@@ -17,7 +17,7 @@ import Reference from '@/components/Reference';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { depuisTTC, tvaRecuperable } from '@/lib/comptabilite';
-import { money, date, dateLong } from '@/lib/format';
+import { money, date, dateLong, montantSaisi } from '@/lib/format';
 import {
   LIBELLE_NATURE, LIBELLE_REPRISE, LIBELLE_STATUT_REPRISE,
   CLASSE_STATUT_REPRISE, LIBELLE_ASSOCIE,
@@ -419,7 +419,7 @@ function LigneEdition({
   const [erreur, setErreur] = useState<string | null>(null);
 
   async function enregistrer() {
-    const v = parseFloat(ttc.replace(',', '.'));
+    const v = (montantSaisi(ttc) ?? NaN);
     if (!Number.isFinite(v) || v < 0) return;
     const m = depuisTTC(v, taux);
     const cat = categories.find((c) => c.id === categorieId);

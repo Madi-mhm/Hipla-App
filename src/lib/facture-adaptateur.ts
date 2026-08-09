@@ -92,9 +92,10 @@ export async function chargerModeleFacture(id: string): Promise<Resultat> {
     return { erreur: 'Facture introuvable ou inaccessible.' };
   }
 
-  if (piece.nature !== 'vente' && piece.nature !== 'avoir') {
+  if (!['vente', 'avoir', 'devis'].includes(String(piece.nature))) {
     return { erreur: "Cette pièce n'est pas un document de vente." };
   }
+  const estDevis = piece.nature === 'devis';
 
   const tiers = piece.tiers as Record<string, unknown> | null;
   if (!tiers) return { erreur: 'Client de la facture introuvable.' };
@@ -117,7 +118,9 @@ export async function chargerModeleFacture(id: string): Promise<Resultat> {
   }));
 
   if (lignes.length === 0) {
-    return { erreur: 'Cette facture ne comporte aucune ligne.' };
+    return { erreur: estDevis
+      ? 'Ce devis ne comporte aucune ligne : il n\u2019y a rien à chiffrer.'
+      : 'Cette facture ne comporte aucune ligne.' };
   }
 
   // Les mentions gelées à l'émission font foi. Un brouillon n'en a pas
@@ -134,7 +137,9 @@ export async function chargerModeleFacture(id: string): Promise<Resultat> {
 
   const emetteur = lireMentions(source);
 
-  if (!emetteur.iban) {
+  // Un devis n'appelle aucun paiement : l'IBAN n'y est pas indispensable.
+  // L'exiger empêcherait de chiffrer avant d'avoir renseigné la banque.
+  if (!emetteur.iban && !estDevis) {
     return {
       erreur:
         "IBAN de l'entreprise absent : la facture ne serait pas payable. " +
@@ -149,11 +154,13 @@ export async function chargerModeleFacture(id: string): Promise<Resultat> {
     numero: piece.numero_piece ? String(piece.numero_piece) : null,
     // Un avoir garde son intitulé propre ; l'acompte et le solde se
     // lisent sur l'origine, la nature ne distinguant que le sens.
-    nature: (piece.nature === 'avoir'
-      ? 'avoir'
-      : piece.origine === 'acompte' || piece.origine === 'solde'
-        ? piece.origine
-        : 'facture') as NatureFacture,
+    nature: (estDevis
+      ? 'devis'
+      : piece.nature === 'avoir'
+        ? 'avoir'
+        : piece.origine === 'acompte' || piece.origine === 'solde'
+          ? piece.origine
+          : 'facture') as NatureFacture,
     brouillon,
 
     emetteur,
@@ -170,7 +177,10 @@ export async function chargerModeleFacture(id: string): Promise<Resultat> {
     },
 
     dateEmission: String(piece.date_piece),
-    dateEcheance: String(piece.date_echeance ?? piece.date_piece),
+    // Pour un devis, la date qui compte est la fin de validité : au-delà,
+    // le prix n'engage plus. Le gabarit l'intitule en conséquence.
+    dateEcheance: String(
+      (estDevis ? piece.valable_jusquau : piece.date_echeance) ?? piece.date_piece),
     delaiPaiement: Number(piece.delai_paiement ?? 15),
     datePrestation: piece.date_prestation ? String(piece.date_prestation) : null,
     periodeDebut: piece.periode_debut ? String(piece.periode_debut) : null,

@@ -9,7 +9,10 @@ import type { Vehicule } from '@/lib/types';
 export const metadata = { title: 'Nouveau trajet — Hipla Gestion' };
 export const dynamic = 'force-dynamic';
 
-export default async function Page() {
+export default async function Page(
+  { searchParams }: { searchParams: Promise<{ refaire?: string }> },
+) {
+  const { refaire } = await searchParams;
   const profil = await profilCourant();
   if (!profil) redirect('/connexion');
   if (!peut(profil.role, 'depenses', 'create')) redirect('/deplacements');
@@ -28,6 +31,15 @@ export default async function Page() {
       .eq('annee', annee).order('km_min'),
     supabase.rpc('km_a_constater'),
   ]);
+
+  /* « Refaire ce trajet » : le même client, la même adresse, souvent le
+     même kilométrage — cinquante-deux fois dans l'année pour un contrat
+     hebdomadaire. On recopie tout sauf la date, qui repart d'aujourd'hui. */
+  const { data: reprise } = refaire
+    ? await supabase.from('deplacements')
+        .select('depart, arrivee, motif, kilometres, aller_retour, vehicule_id')
+        .eq('id', refaire).maybeSingle()
+    : { data: null };
 
   const v = (vehicules ?? []) as Vehicule[];
   const cv = v[0]?.cv_fiscaux ?? 5;
@@ -54,6 +66,7 @@ export default async function Page() {
           lieux={((lieux ?? []) as Array<{ lieu: string }>).map((l) => l.lieu)}
           motifs={((motifs ?? []) as Array<{ motif: string }>).map((m) => m.motif)}
           bareme={tranches}
+          reprise={reprise ?? null}
           cumulAnnuel={Number(e.cumul_annuel ?? 0)}
         />
       </div>

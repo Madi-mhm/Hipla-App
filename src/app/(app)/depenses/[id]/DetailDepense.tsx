@@ -15,7 +15,7 @@ import { compresser, poids } from '@/lib/compression';
 import {
   TAUX_TVA, depuisHT, depuisTTC, tvaRecuperable, montantsCoherents,
 } from '@/lib/comptabilite';
-import { money, date, dateLong } from '@/lib/format';
+import { money, date, dateLong, montantSaisi } from '@/lib/format';
 import { LIBELLE_STATUT, CLASSE_STATUT, type Categorie, type Depense } from '@/lib/types';
 import { detailsModification, detailsSuppression } from '@/lib/audit';
 import BoutonRevue from '@/components/BoutonRevue';
@@ -68,7 +68,7 @@ export default function DetailDepense({
   const categorie = categories.find((c) => c.id === categorieId) ?? null;
 
   const montants = useMemo(() => {
-    const v = parseFloat(montant.replace(',', '.'));
+    const v = (montantSaisi(montant) ?? NaN);
     if (!Number.isFinite(v) || v < 0) return null;
     return saisieEn === 'ht' ? depuisHT(v, tauxTva) : depuisTTC(v, tauxTva);
   }, [montant, tauxTva, saisieEn]);

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import Header from '@/components/Header';
+import OngletsExports from '@/components/OngletsExports';
 import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
@@ -92,8 +93,9 @@ export default async function Page() {
 
   return (
     <>
-      <Header titre="Exports" sousTitre="Extraction filtrée des écritures" />
+      <Header titre="Écritures" sousTitre="Extraction filtrée, et journal" />
       <div className="content">
+        <OngletsExports />
         <Exports
           depenses={dep}
           frais={frais}

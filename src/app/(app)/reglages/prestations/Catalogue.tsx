@@ -12,7 +12,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { money } from '@/lib/format';
+import { money, montantSaisi } from '@/lib/format';
 import { TAUX_TVA } from '@/lib/comptabilite';
 import Dialogue from '@/components/Dialogue';
 import Alerte from '@/components/Alerte';
@@ -63,7 +63,7 @@ export default function Catalogue({ prestations, idsUtilises, peutGerer }: Props
     setErreur(null);
     setEnCours(true);
 
-    const v = parseFloat(prix.replace(',', '.'));
+    const v = (montantSaisi(prix) ?? NaN);
     const supabase = createClient();
     const donnees = {
       libelle: libelle.trim(),

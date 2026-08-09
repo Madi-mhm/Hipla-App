@@ -20,7 +20,14 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { money, date, dateLong } from '@/lib/format';
+import { money, date, dateLong, montantSaisi } from '@/lib/format';
+import Reference from '@/components/Reference';
+
+/** Un devis proposé au rattachement, avec l'écart déjà calculé. */
+export type DevisRattachable = {
+  id: string; numero_piece: string | null; date_piece: string;
+  objet: string | null; montant_ttc: number; ecart: number;
+};
 import Dialogue from '@/components/Dialogue';
 import Alerte from '@/components/Alerte';
 import {
@@ -37,6 +44,13 @@ type Props = {
   piece: Piece & { tiers: Tiers | null };
   lignes: LignePiece[];
   reglements: Reglement[];
+  /** Le devis dont cette facture est issue, s'il y en a un. */
+  devisOrigine: {
+    id: string; numero_piece: string | null;
+    date_piece: string; montant_ttc: number;
+  } | null;
+  /** Devis du même client encore libres, si la facture n'en a pas. */
+  devisRattachables: DevisRattachable[];
   prestations: Prestation[];
   entreprise: Record<string, unknown> | null;
   creditsLibres: TransactionQontoLike[];
@@ -62,7 +76,8 @@ function champ(source: Record<string, unknown> | null, cle: string): string | nu
 }
 
 export default function DetailFacture({
-  piece, lignes, reglements, prestations, entreprise, creditsLibres,
+  piece, lignes, reglements, devisOrigine, devisRattachables,
+  prestations, entreprise, creditsLibres,
   peutGerer, peutEncaisser,
 }: Props) {
   // Jours pleins depuis l'échéance. Négatif tant qu'elle n'est pas
@@ -101,6 +116,29 @@ export default function DetailFacture({
   const [transactionChoisie, setTransactionChoisie] = useState('');
 
   const statut = statutVente(piece);
+  const [devisChoisi, setDevisChoisi] = useState('');
+
+  async function rattacherDevis() {
+    if (!devisChoisi) return;
+    setEnCours(true); setErreur(null);
+    const supabase = createClient();
+    const { error } = await supabase.rpc('rattacher_devis', {
+      p_facture: piece.id, p_devis: devisChoisi,
+    });
+    if (error) { setErreur(`Rattachement impossible — ${error.message}`); setEnCours(false); return; }
+    setEnCours(false);
+    router.refresh();
+  }
+
+  async function detacherDevis() {
+    if (!devisOrigine) return;
+    setEnCours(true); setErreur(null);
+    const supabase = createClient();
+    const { error } = await supabase.rpc('detacher_devis', { p_devis: devisOrigine.id });
+    if (error) { setErreur(error.message); setEnCours(false); return; }
+    setEnCours(false);
+    router.refresh();
+  }
   const nature = natureVente(piece);
   const modifiable = piece.etat === 'brouillon';
   const estParticulier = piece.tiers?.type === 'particulier';
@@ -148,8 +186,8 @@ export default function DetailFacture({
 
   async function ajouterLigne(e: React.FormEvent) {
     e.preventDefault();
-    const q = parseFloat(quantite.replace(',', '.'));
-    const pu = parseFloat(prixUnitaire.replace(',', '.'));
+    const q = (montantSaisi(quantite) ?? NaN);
+    const pu = (montantSaisi(prixUnitaire) ?? NaN);
     if (!libelle.trim() || !Number.isFinite(q) || !Number.isFinite(pu)) {
       setErreur('Libellé, quantité et prix unitaire sont requis.');
       return;
@@ -242,7 +280,7 @@ export default function DetailFacture({
     const supabase = createClient();
 
     const v = montantRegle.trim()
-      ? parseFloat(montantRegle.replace(',', '.'))
+      ? (montantSaisi(montantRegle) ?? NaN)
       : null;
 
     const { data, error } = await supabase.rpc('encaisser_piece', {
@@ -489,6 +527,81 @@ export default function DetailFacture({
 
       {/* ---------- Lignes ---------- */}
       <div className="card" style={{ marginBottom: '1.25rem' }}>
+        {/* D'où vient cette facture.
+            Le lien n'existait que dans un sens : le devis pointait sa
+            facture, la facture ignorait son devis. Or c'est de la facture
+            qu'on part quand un client conteste un prix. */}
+        {devisOrigine && (
+          <p className="muted" style={{
+            fontSize: 'var(--fs-sm)', marginBottom: '.7rem', lineHeight: 1.55,
+          }}>
+            Issue du devis{' '}
+            <Reference id={devisOrigine.id} className="mono"
+              style={{ color: 'var(--navy)', fontWeight: 600 }}>
+              {devisOrigine.numero_piece ?? 'sans numéro'}
+            </Reference>
+            {' '}du {date(devisOrigine.date_piece)}, chiffré{' '}
+            {money(Number(devisOrigine.montant_ttc))}
+            {Math.abs(Number(devisOrigine.montant_ttc) - Number(piece.montant_ttc)) > 0.005 && (
+              <>
+                {' '}—{' '}
+                <span style={{ color: 'var(--warning)' }}>
+                  écart de {money(Math.abs(
+                    Number(piece.montant_ttc) - Number(devisOrigine.montant_ttc)))}
+                </span>
+              </>
+            )}
+            .
+            {peutGerer && (
+              <>
+                {' '}
+                <button onClick={detacherDevis} disabled={enCours}
+                  style={{
+                    background: 'none', border: 'none', padding: 0,
+                    font: 'inherit', color: 'var(--g-500)',
+                    textDecoration: 'underline', cursor: 'pointer',
+                  }}>
+                  détacher
+                </button>
+              </>
+            )}
+          </p>
+        )}
+
+        {/* Rattacher après coup.
+            `accepter_devis` n'est pas le seul chemin : on chiffre, le
+            client accepte au téléphone, on fait le travail et l'on
+            facture directement. Les deux documents existent alors sans
+            que rien ne les relie, et l'application ne peut pas le
+            deviner — il faut le lui dire. */}
+        {!devisOrigine && peutGerer && devisRattachables.length > 0 && (
+          <div style={{
+            display: 'flex', gap: '.5rem', alignItems: 'center',
+            flexWrap: 'wrap', marginBottom: '.9rem',
+          }}>
+            <label style={{ flex: '1 1 20rem' }}>
+              <span className="muted" style={{ fontSize: 'var(--fs-xs)' }}>
+                Cette facture vient-elle d&apos;un devis ?
+              </span>
+              <select value={devisChoisi} onChange={(e) => setDevisChoisi(e.target.value)}>
+                <option value="">Aucun</option>
+                {devisRattachables.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.numero_piece} · {date(d.date_piece)} · {money(Number(d.montant_ttc))}
+                    {Math.abs(Number(d.ecart)) > 0.005
+                      ? ` · écart ${money(Math.abs(Number(d.ecart)))}`
+                      : ' · montant identique'}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button onClick={rattacherDevis} disabled={enCours || !devisChoisi}
+              className="btn btn--ghost btn--sm">
+              Rattacher
+            </button>
+          </div>
+        )}
+
         <p className="card__title">Prestations facturées</p>
 
         {lignes.length === 0 ? (

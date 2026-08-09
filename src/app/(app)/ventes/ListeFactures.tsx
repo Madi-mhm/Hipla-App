@@ -158,9 +158,13 @@ export default function ListeFactures({
         <div className="card" style={{ marginBottom: '1.25rem' }}>
           <div className={styles.barre}>
             <p className="card__title">Établir une facture</p>
-            <button onClick={() => setOuvert(!ouvert)} className="btn btn--gold">
-              {ouvert ? 'Annuler' : '+ Nouvelle facture'}
-            </button>
+            <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
+              {/* La recherche existait sans qu'aucune liste n'y mène. */}
+              <Link href="/recherche" className="btn btn--ghost">Rechercher</Link>
+              <button onClick={() => setOuvert(!ouvert)} className="btn btn--gold">
+                {ouvert ? 'Annuler' : '+ Nouvelle facture'}
+              </button>
+            </div>
           </div>
 
           {clients.length === 0 ? (

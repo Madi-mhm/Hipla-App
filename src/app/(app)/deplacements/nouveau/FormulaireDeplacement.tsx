@@ -24,7 +24,7 @@
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { money } from '@/lib/format';
+import { money, montantSaisi } from '@/lib/format';
 import type { Vehicule } from '@/lib/types';
 import { detailsCreation } from '@/lib/audit';
 import styles from '../../depenses/nouvelle/formulaire.module.css';
@@ -38,6 +38,11 @@ type Props = {
   motifs: string[];
   bareme: Tranche[];
   cumulAnnuel: number;
+  /** Trajet à reprendre : tout sauf la date, qui repart d'aujourd'hui. */
+  reprise?: {
+    depart: string; arrivee: string; motif: string | null;
+    kilometres: number; aller_retour: boolean; vehicule_id: string | null;
+  } | null;
 };
 
 /**
@@ -58,22 +63,27 @@ function indemnite(cumulAvant: number, kmAjoutes: number, bareme: Tranche[]): nu
 }
 
 export default function FormulaireDeplacement({
-  vehicules, peutValider, lieux, motifs, bareme, cumulAnnuel,
+  vehicules, peutValider, lieux, motifs, bareme, cumulAnnuel, reprise,
 }: Props) {
   const router = useRouter();
   const [dateTrajet, setDateTrajet] = useState(new Date().toISOString().slice(0, 10));
-  const [vehiculeId, setVehiculeId] = useState(vehicules[0]?.id ?? '');
-  const [depart, setDepart] = useState('Chambéry');
-  const [arrivee, setArrivee] = useState('');
+  const [vehiculeId, setVehiculeId] = useState(
+    reprise?.vehicule_id ?? vehicules[0]?.id ?? '');
+  /* Un trajet peut arriver pré-rempli depuis un précédent : même client,
+     même adresse, souvent le même kilométrage, cinquante-deux fois par an.
+     Seule la date change, et elle prend le jour même. */
+  const [depart, setDepart] = useState(reprise?.depart ?? 'Chambéry');
+  const [arrivee, setArrivee] = useState(reprise?.arrivee ?? '');
   const [etapes, setEtapes] = useState<string[]>([]);
   const [nouvelleEtape, setNouvelleEtape] = useState('');
-  const [motif, setMotif] = useState('');
-  const [kilometres, setKilometres] = useState('');
-  const [allerRetour, setAllerRetour] = useState(true);
+  const [motif, setMotif] = useState(reprise?.motif ?? '');
+  const [kilometres, setKilometres] = useState(
+    reprise?.kilometres ? String(reprise.kilometres).replace('.', ',') : '');
+  const [allerRetour, setAllerRetour] = useState(reprise?.aller_retour ?? true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
 
-  const km = parseFloat(kilometres.replace(',', '.'));
+  const km = (montantSaisi(kilometres) ?? NaN);
   const kmTotal = Number.isFinite(km) ? km * (allerRetour ? 2 : 1) : 0;
 
   const valeur = useMemo(

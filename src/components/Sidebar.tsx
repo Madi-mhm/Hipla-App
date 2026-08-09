@@ -24,52 +24,67 @@ type Entree = {
   action?: Action;       // permission requise, « read » par défaut
 };
 
-type Groupe = { titre: string; entrees: Entree[] };
+type Groupe = { titre: string; entrees: Entree[]; replie?: boolean };
 
+/*
+  Le menu est rangé par RYTHME, non par concept comptable.
+
+  Il l'était par domaine : Pilotage, Comptabilité, Documents, Réglages.
+  Vingt-huit entrées au même niveau, où « Immobilisations » pesait autant
+  que « Séance hebdomadaire » — l'une s'ouvre une fois l'an, l'autre chaque
+  semaine. Ce n'est pas le nombre d'entrées qui fatigue, c'est l'absence de
+  hiérarchie de fréquence.
+
+  Les deux derniers groupes sont repliés par défaut : dix mois sur douze,
+  on n'y touche pas.
+*/
 const NAVIGATION: Groupe[] = [
   {
-    titre: 'Pilotage',
+    titre: 'Cette semaine',
     entrees: [
-      { libelle: 'Séance hebdomadaire', href: '/seance', disponible: true },
-      { libelle: 'Journal comptable', href: '/exports/journal', disponible: true, module: 'exports' },
-      { libelle: 'Espace comptable', href: '/comptable', disponible: true, module: 'exports', action: 'export' },
+      { libelle: 'Séance', href: '/seance', disponible: true },
+      { libelle: 'Banque', href: '/banque', disponible: true, module: 'banque' },
+      { libelle: 'Dépenses', href: '/depenses', disponible: true, module: 'depenses' },
+      { libelle: 'Devis', href: '/devis', disponible: true, module: 'ventes' },
+      { libelle: 'Contrats', href: '/contrats', disponible: true, module: 'ventes' },
+      { libelle: 'Ventes', href: '/ventes', disponible: true, module: 'ventes' },
+      { libelle: 'Déplacements', href: '/deplacements', disponible: true, module: 'depenses' },
       { libelle: 'Tâches', href: '/taches', disponible: true, module: 'taches' },
       { libelle: 'Recherche', href: '/recherche', disponible: true, module: 'depenses' },
-      { libelle: 'Tableau de bord', href: '/tableau-de-bord', disponible: true },
     ],
   },
   {
-    titre: 'Comptabilité',
+    titre: 'Ce mois',
     entrees: [
-      { libelle: 'Dépenses', href: '/depenses', disponible: true, module: 'depenses' },
-      { libelle: 'Déplacements', href: '/deplacements', disponible: true, module: 'depenses' },
-      { libelle: 'Frais de création', href: '/frais-creation', disponible: true, module: 'depenses' },
-      { libelle: 'Abonnements', href: '/abonnements', disponible: true, module: 'abonnements' },
-      { libelle: 'Banque', href: '/banque', disponible: true, module: 'banque' },
-      { libelle: 'Ventes', href: '/ventes', disponible: true, module: 'ventes' },
-      { libelle: 'Clients', href: '/clients', disponible: true, module: 'clients' },
       { libelle: 'TVA', href: '/tva', disponible: true, module: 'depenses' },
+      { libelle: 'Abonnements', href: '/abonnements', disponible: true, module: 'abonnements' },
+      { libelle: 'Tableau de bord', href: '/tableau-de-bord', disponible: true },
+      { libelle: 'Rapports mensuels', href: '/rapports', disponible: true, module: 'exports' },
+      { libelle: 'Écritures', href: '/exports', disponible: true, module: 'exports' },
+    ],
+  },
+  {
+    titre: 'Cette année',
+    replie: true,
+    entrees: [
       { libelle: 'Échéances', href: '/echeances', disponible: true, module: 'echeances' },
+      { libelle: 'Espace comptable', href: '/comptable', disponible: true, module: 'exports', action: 'export' },
       { libelle: 'Immobilisations', href: '/immobilisations', disponible: true, module: 'depenses' },
       { libelle: 'Associés', href: '/associes', disponible: true, module: 'entreprise' },
+      { libelle: 'Frais de création', href: '/frais-creation', disponible: true, module: 'depenses' },
     ],
   },
   {
-    titre: 'Documents',
+    titre: 'Références',
+    replie: true,
     entrees: [
-      { libelle: 'Coffre', href: '/coffre', disponible: true, module: 'documents' },
-      { libelle: 'Rapports mensuels', href: '/rapports', disponible: true, module: 'exports' },
-      { libelle: 'Exports', href: '/exports', disponible: true, module: 'exports' },
-    ],
-  },
-  {
-    titre: 'Réglages',
-    entrees: [
-      { libelle: 'Entreprise', href: '/reglages/entreprise', disponible: true, module: 'entreprise' },
+      { libelle: 'Clients', href: '/clients', disponible: true, module: 'clients' },
+      { libelle: 'Prestations', href: '/reglages/prestations', disponible: true, module: 'prestations' },
       { libelle: 'Catégories', href: '/reglages/categories', disponible: true, module: 'depenses' },
       { libelle: "Règles d'appariement", href: '/reglages/regles', disponible: true, module: 'banque' },
-      { libelle: 'Prestations', href: '/reglages/prestations', disponible: true, module: 'prestations' },
       { libelle: 'Véhicules', href: '/reglages/vehicules', disponible: true, module: 'depenses' },
+      { libelle: 'Coffre', href: '/coffre', disponible: true, module: 'documents' },
+      { libelle: 'Entreprise', href: '/reglages/entreprise', disponible: true, module: 'entreprise' },
       { libelle: 'Utilisateurs', href: '/reglages/utilisateurs', disponible: true, module: 'utilisateurs' },
       { libelle: "Journal d'audit", href: '/reglages/audit', disponible: true, module: 'audit_comptable' },
       { libelle: 'Supervision', href: '/reglages/supervision', disponible: true, module: 'entreprise', action: 'update' },
@@ -80,6 +95,24 @@ const NAVIGATION: Groupe[] = [
 export default function Sidebar({ role }: { role: Role }) {
   const chemin = usePathname();
   const [ouvert, setOuvert] = useState(false);
+
+  /* Groupes repliés. On mémorise les titres FERMÉS plutôt que les ouverts :
+     un groupe ajouté plus tard s'affiche alors ouvert, ce qui est le bon
+     défaut — un nouvel écran doit se voir. */
+  const [replies, setReplies] = useState<string[]>(
+    () => NAVIGATION.filter((g) => g.replie).map((g) => g.titre));
+
+  function basculer(titre: string) {
+    setReplies((r) => r.includes(titre) ? r.filter((t) => t !== titre) : [...r, titre]);
+  }
+
+  /* Un groupe replié qui contient la page ouverte se déplie : sans quoi
+     l'entrée active serait invisible, et l'on se croirait perdu. */
+  useEffect(() => {
+    const porteur = NAVIGATION.find(
+      (g) => g.replie && g.entrees.some((e) => e.href === chemin));
+    if (porteur) setReplies((r) => r.filter((t) => t !== porteur.titre));
+  }, [chemin]);
 
   useEffect(() => setOuvert(false), [chemin]);
 
@@ -140,8 +173,33 @@ export default function Sidebar({ role }: { role: Role }) {
         <nav className={styles.nav} aria-label="Navigation principale">
           {groupes.map((groupe) => (
             <div key={groupe.titre} className={styles.groupe}>
-              <p className={styles.groupeTitre}>{groupe.titre}</p>
-              <ul>
+              {/* Un groupe repliable se replie ; les autres gardent leur
+                  intitulé simple, sans bouton qui ne ferait rien. */}
+              {groupe.replie ? (
+                <button
+                  type="button"
+                  onClick={() => basculer(groupe.titre)}
+                  aria-expanded={!replies.includes(groupe.titre)}
+                  className={styles.groupeTitre}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '.35rem',
+                    width: '100%', background: 'none', border: 'none',
+                    cursor: 'pointer', textAlign: 'left', padding: 0,
+                    font: 'inherit', color: 'inherit',
+                  }}
+                >
+                  <span aria-hidden="true" style={{
+                    display: 'inline-block', fontSize: '.6em',
+                    transform: replies.includes(groupe.titre)
+                      ? 'rotate(-90deg)' : 'none',
+                    transition: 'transform .15s ease',
+                  }}>▼</span>
+                  {groupe.titre}
+                </button>
+              ) : (
+                <p className={styles.groupeTitre}>{groupe.titre}</p>
+              )}
+              <ul hidden={replies.includes(groupe.titre)}>
                 {groupe.entrees.map((e) => {
                   if (e.etat === 'ouvert') {
                     return (

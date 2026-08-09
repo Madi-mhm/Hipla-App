@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import Header from '@/components/Header';
+import OngletsExports from '@/components/OngletsExports';
 import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
@@ -58,8 +59,9 @@ export default async function Page() {
   if (!exercice) {
     return (
       <>
-        <Header titre="Journal comptable" sousTitre="Les écritures, lisibles" />
+        <Header titre="Écritures" sousTitre="Journal" />
         <div className="content">
+          <OngletsExports />
           <div className="card">
             <p style={{ fontSize: 'var(--fs-sm)' }}>
               Aucun exercice ne couvre la date du jour. Réglages → Entreprise.
@@ -107,10 +109,11 @@ export default async function Page() {
   return (
     <>
       <Header
-        titre="Journal comptable"
-        sousTitre={`Du ${dateLong(exercice.date_debut)} au ${dateLong(exercice.date_fin)}`}
+        titre="Écritures"
+        sousTitre={`Journal — du ${dateLong(exercice.date_debut)} au ${dateLong(exercice.date_fin)}`}
       />
       <div className="content">
+        <OngletsExports />
 
         {/* ---------- L'équilibre ---------- */}
         <div className="card" style={{

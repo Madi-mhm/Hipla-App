@@ -81,6 +81,7 @@ const NATURES: Record<string, string> = {
   achat: 'Achat', vente: 'Facture', avoir: 'Avoir',
   creation: 'Frais de création', km: 'Indemnités kilométriques',
   banque: 'Opération bancaire', amortissement: 'Dotation aux amortissements',
+  devis: 'Devis', paie: 'Paie',
 };
 
 export default function Reference({ id, children, style, className, title }: {
@@ -348,15 +349,24 @@ function Contenu({ a, onFermer, onRecharger }: {
         Pour la consulter ou l'envoyer, il fallait donc quitter la liste
         — alors que c'est le geste le plus fréquent.
       */}
-      {a.nature === 'vente' && a.etat === 'validee' && (
+      {/*
+        Le document se téléchargeait pour une facture de vente émise, et
+        pour elle seule. Un avoir en a un — même gabarit, même route — et
+        un devis aussi depuis qu'il existe. Les exclure obligeait à ouvrir
+        la page complète pour un geste que le panneau savait déjà faire.
+
+        Un brouillon reste exclu : le PDF sortirait marqué « brouillon »,
+        et l'envoyer serait une erreur. On le télécharge depuis sa page,
+        où l'on voit qu'il n'est pas émis.
+      */}
+      {((a.nature === 'vente' || a.nature === 'avoir') && a.etat === 'validee') && (
         <div style={{
           display: 'flex', gap: '.5rem', marginTop: '1rem', flexWrap: 'wrap',
           paddingTop: '.8rem', borderTop: '1px solid var(--g-200)',
         }}>
           <a href={`/api/factures/${a.id}/pdf`} target="_blank" rel="noopener"
-            className="btn btn--ghost" data-fenetre="oui"
-            style={{ minHeight: 30, padding: '.2rem .8rem', fontSize: '.74rem' }}>
-            Télécharger la facture
+            className="btn btn--ghost btn--sm" data-fenetre="oui">
+            {a.nature === 'avoir' ? "Télécharger l'avoir" : 'Télécharger la facture'}
           </a>
           {/*
             Le courrier de relance vit dans le bloc « Relances », qui
@@ -365,6 +375,18 @@ function Contenu({ a, onFermer, onRecharger }: {
             — le reste dû seulement — et proposait de relancer une
             facture non échue.
           */}
+        </div>
+      )}
+
+      {a.nature === 'devis' && (
+        <div style={{
+          display: 'flex', gap: '.5rem', marginTop: '1rem', flexWrap: 'wrap',
+          paddingTop: '.8rem', borderTop: '1px solid var(--g-200)',
+        }}>
+          <a href={`/api/devis/${a.id}/pdf`} target="_blank" rel="noopener"
+            className="btn btn--ghost btn--sm" data-fenetre="oui">
+            Télécharger le devis
+          </a>
         </div>
       )}
 

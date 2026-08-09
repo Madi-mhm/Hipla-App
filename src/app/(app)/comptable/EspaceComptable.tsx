@@ -73,6 +73,12 @@ export default function EspaceComptable({
 
   // Regroupement : « 4 justificatifs manquants » se traite mieux que
   // quatre lignes séparées.
+  // Ce que l'on garde des échéances : le compte, la plus proche, les dépassées.
+  const aVenir = echeances.filter((e) => !e.accomplie);
+  const prochaine = aVenir[0] ?? null;
+  const joursProchaine = prochaine ? daysUntil(prochaine.echeance) : 0;
+  const enRetard = aVenir.filter((e) => daysUntil(e.echeance) < 0);
+
   const parType = anomalies.reduce<Record<string, Anomalie[]>>((acc, a) => {
     (acc[a.type] ??= []).push(a);
     return acc;
@@ -221,50 +227,46 @@ export default function EspaceComptable({
       </div>
 
       {/* ---------- Échéances ---------- */}
+      {/*
+        Le tableau complet vivait ici ET sur /echeances, qui porte en plus
+        l'action « Accomplir » — laquelle engendre l'occurrence suivante
+        d'une obligation périodique. Deux tableaux, une seule action : celui
+        d'ici ne servait qu'à répéter.
+
+        Reste ce qui est utile à cet endroit : combien, et laquelle vient
+        en premier. Le détail est à un clic.
+      */}
       <div className="card" style={{ marginBottom: '1.25rem' }}>
-        <p className="card__title">Échéances déclaratives</p>
-        {echeances.length === 0 ? (
-          <div className="etat-vide">
-            <p>Aucune obligation enregistrée.</p>
-            <p className="muted">Réglages → Entreprise.</p>
-          </div>
-        ) : (
-        <div className="table-scroll">
-          <table style={{ minWidth: 440, fontSize: 'var(--fs-sm)' }}>
-            <tbody>
-              {echeances.map((e) => {
-                const j = daysUntil(e.echeance);
-                return (
-                  <tr key={e.id} style={{
-                    borderBottom: '1px solid var(--g-200)',
-                    opacity: e.accomplie ? 0.55 : 1,
-                  }}>
-                    <td style={td}>
-                      {e.libelle}
-                      {e.detail && (
-                        <span className="muted" style={{ display: 'block', fontSize: 'var(--fs-xs)' }}>
-                          {e.detail}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      {dateLong(e.echeance)}
-                    </td>
-                    <td style={{ ...td, textAlign: 'right', width: 90 }}>
-                      <span className={`badge ${
-                        e.accomplie ? 'badge--success'
-                        : j < 0 ? 'badge--danger'
-                        : j <= 30 ? 'badge--warning' : 'badge--neutral'
-                      }`}>
-                        {e.accomplie ? 'accomplie' : j < 0 ? 'dépassée' : `J-${j}`}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className={styles.entete}>
+          <p className="card__title">
+            Échéances déclaratives — {aVenir.length} à venir
+          </p>
+          <Link href="/echeances" className="btn btn--ghost btn--sm">
+            Voir et pointer
+          </Link>
         </div>
+
+        {aVenir.length === 0 ? (
+          <p className="muted" style={{ fontSize: 'var(--fs-sm)' }}>
+            Aucune obligation en attente.
+          </p>
+        ) : (
+          <p style={{ fontSize: 'var(--fs-sm)', lineHeight: 1.55 }}>
+            La plus proche : <strong>{prochaine!.libelle}</strong>, le{' '}
+            {dateLong(prochaine!.echeance)}
+            {' — '}
+            <span className={`badge ${
+              joursProchaine < 0 ? 'badge--danger'
+              : joursProchaine <= 30 ? 'badge--warning' : 'badge--neutral'
+            }`}>
+              {joursProchaine < 0 ? 'dépassée' : `J-${joursProchaine}`}
+            </span>
+            {enRetard.length > 0 && (
+              <span style={{ color: 'var(--danger)' }}>
+                {' · '}{enRetard.length} dépassée{enRetard.length > 1 ? 's' : ''}
+              </span>
+            )}
+          </p>
         )}
       </div>
 
@@ -277,7 +279,7 @@ export default function EspaceComptable({
           Excel.
         </p>
         <div style={{ display: 'flex', gap: '.6rem', flexWrap: 'wrap' }}>
-          <Link href="/exports" className="btn btn--gold">Exports filtrés</Link>
+          <Link href="/exports" className="btn btn--gold">Écritures et exports</Link>
           <Link href="/recherche" className="btn btn--ghost">Recherche par pièce</Link>
           <Link href="/reglages/audit" className="btn btn--ghost">Journal d'audit</Link>
         </div>

@@ -17,7 +17,7 @@ import Link from 'next/link';
 import Reference from '@/components/Reference';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { money, date } from '@/lib/format';
+import { money, date, montantSaisi } from '@/lib/format';
 import { TAUX_TVA } from '@/lib/comptabilite';
 import Alerte from '@/components/Alerte';
 import type { Categorie } from '@/lib/types';
@@ -167,7 +167,7 @@ export default function JustificatifsQonto({ lignes, categories, peutValider }: 
     const e = etats[l.id];
     if (!e?.categorieId) { maj(l.id, { erreur: 'Choisissez une catégorie.' }); return; }
 
-    const v = parseFloat((e.montantTtc ?? '').replace(',', '.'));
+    const v = montantSaisi(e.montantTtc ?? '') ?? NaN;
     if (!Number.isFinite(v) || v <= 0) { maj(l.id, { erreur: 'Montant invalide.' }); return; }
 
     setEnCours(true);

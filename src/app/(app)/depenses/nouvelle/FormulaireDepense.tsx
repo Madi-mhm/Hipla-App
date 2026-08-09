@@ -18,7 +18,7 @@ import {
   TAUX_TVA, depuisHT, depuisTTC, tvaRecuperable,
   montantsCoherents, SEUIL_IMMOBILISATION,
 } from '@/lib/comptabilite';
-import { money } from '@/lib/format';
+import { money, montantSaisi } from '@/lib/format';
 import type { Categorie } from '@/lib/types';
 import Dialogue from '@/components/Dialogue';
 import Alerte from '@/components/Alerte';
@@ -65,7 +65,7 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
   }
 
   const montants = useMemo(() => {
-    const v = parseFloat(montant.replace(',', '.'));
+    const v = (montantSaisi(montant) ?? NaN);
     if (!Number.isFinite(v) || v < 0) return null;
     return saisieEn === 'ht' ? depuisHT(v, tauxTva) : depuisTTC(v, tauxTva);
   }, [montant, tauxTva, saisieEn]);

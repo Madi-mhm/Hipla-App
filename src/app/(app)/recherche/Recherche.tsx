@@ -12,7 +12,7 @@
 import { useMemo, useState } from 'react';
 import Reference from '@/components/Reference';
 import Link from 'next/link';
-import { money, date } from '@/lib/format';
+import { money, date, montantSaisi } from '@/lib/format';
 import styles from './recherche.module.css';
 
 type Piece = {
@@ -59,8 +59,8 @@ export default function Recherche({ pieces }: { pieces: Piece[] }) {
 
   const resultats = useMemo(() => {
     const t = terme.trim().toLowerCase();
-    const min = parseFloat(montantMin.replace(',', '.'));
-    const max = parseFloat(montantMax.replace(',', '.'));
+    const min = (montantSaisi(montantMin) ?? NaN);
+    const max = (montantSaisi(montantMax) ?? NaN);
 
     return pieces.filter((p) => {
       if (nature && p.nature !== nature) return false;
@@ -105,7 +105,6 @@ export default function Recherche({ pieces }: { pieces: Piece[] }) {
             value={terme}
             onChange={(e) => setTerme(e.target.value)}
             placeholder="Numéro de pièce, fournisseur, montant, note…"
-            autoFocus
           />
           {terme && (
             <button type="button" onClick={() => setTerme('')} aria-label="Effacer">×</button>

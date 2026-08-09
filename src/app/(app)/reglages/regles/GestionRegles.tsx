@@ -20,7 +20,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { money, date } from '@/lib/format';
+import { money, date, montantSaisi } from '@/lib/format';
 import Dialogue from '@/components/Dialogue';
 import Alerte from '@/components/Alerte';
 import type { Categorie } from '@/lib/types';
@@ -133,7 +133,7 @@ export default function GestionRegles({ regles, alias, categories, peutGerer }: 
       motif: motif.trim(),
       sens: sens || null,
       categorie_id: categorieId || null,
-      taux_tva: tauxTva === '' ? null : Number(tauxTva.replace(',', '.')),
+      taux_tva: tauxTva === '' ? null : montantSaisi(tauxTva),
       jamais_automatique: jamaisAuto,
       actif: true,
     };

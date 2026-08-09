@@ -19,7 +19,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { compresser, poids } from '@/lib/compression';
 import { depuisTTC, tvaRecuperable, montantsCoherents, TAUX_TVA } from '@/lib/comptabilite';
-import { money, date } from '@/lib/format';
+import { money, date, montantSaisi } from '@/lib/format';
 import Alerte from '@/components/Alerte';
 import type { Categorie } from '@/lib/types';
 import styles from './extraction.module.css';
@@ -186,7 +186,7 @@ export default function Extraction({
   }
 
   async function enregistrer(doc: Document, valider: boolean) {
-    const v = parseFloat((doc.montantTtc ?? '').replace(',', '.'));
+    const v = montantSaisi(doc.montantTtc ?? '') ?? NaN;
     if (!Number.isFinite(v) || v <= 0) {
       majDoc(doc.id, { erreur: 'Montant invalide.' });
       return;

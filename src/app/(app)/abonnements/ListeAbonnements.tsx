@@ -17,7 +17,7 @@ import { useMemo, useState } from 'react';
 import Reference from '@/components/Reference';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { money, date, dateLong, daysUntil } from '@/lib/format';
+import { money, date, dateLong, daysUntil, montantSaisi } from '@/lib/format';
 import { depuisHT, depuisTTC } from '@/lib/comptabilite';
 import Dialogue from '@/components/Dialogue';
 import Alerte from '@/components/Alerte';
@@ -86,7 +86,7 @@ export default function ListeAbonnements({
   });
 
   const montants = useMemo(() => {
-    const v = parseFloat(montant.replace(',', '.'));
+    const v = (montantSaisi(montant) ?? NaN);
     if (!Number.isFinite(v) || v < 0) return null;
     return saisieEn === 'ht' ? depuisHT(v, tauxTva) : depuisTTC(v, tauxTva);
   }, [montant, tauxTva, saisieEn]);
@@ -498,7 +498,7 @@ export default function ListeAbonnements({
           const a = aPasserPayant;
           setAPasserPayant(null);
           if (!a) return;
-          const v = parseFloat(valeur.replace(',', '.'));
+          const v = (montantSaisi(valeur) ?? NaN);
           if (!Number.isFinite(v) || v <= 0) { setErreur('Montant invalide.'); return; }
 
           setEnCours(true);

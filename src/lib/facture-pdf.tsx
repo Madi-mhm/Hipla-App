@@ -151,6 +151,10 @@ export function documentFacture(m: ModeleFacture) {
   const e = m.emetteur;
   const d = m.destinataire;
   const soldee = m.montantEncaisse >= m.netAPayer && m.netAPayer > 0;
+  /* Un devis n'appelle aucun paiement : ni échéance, ni délai, ni
+     coordonnées bancaires. Ce qu'il annonce, c'est jusqu'à quand le prix
+     tient. */
+  const estDevis = m.nature === 'devis';
 
   const periode =
     m.periodeDebut && m.periodeFin
@@ -210,13 +214,17 @@ export function documentFacture(m: ModeleFacture) {
               <Text style={s.infoValeur}>{periode}</Text>
             </View>
             <View style={s.ligneInfo}>
-              <Text style={s.infoCle}>Échéance</Text>
+              <Text style={s.infoCle}>
+                {estDevis ? 'Valable jusqu\u2019au' : '\u00c9chéance'}
+              </Text>
               <Text style={s.infoValeur}>{dateFr(m.dateEcheance)}</Text>
             </View>
-            <View style={s.ligneInfo}>
-              <Text style={s.infoCle}>Délai</Text>
-              <Text style={s.infoValeur}>{m.delaiPaiement} jours</Text>
-            </View>
+            {!estDevis && (
+              <View style={s.ligneInfo}>
+                <Text style={s.infoCle}>Délai</Text>
+                <Text style={s.infoValeur}>{m.delaiPaiement} jours</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -282,13 +290,31 @@ export function documentFacture(m: ModeleFacture) {
             )}
 
             <View style={s.ligneTotalFort}>
-              <Text style={s.netLibelle}>NET À PAYER</Text>
+              <Text style={s.netLibelle}>
+                {estDevis ? 'TOTAL DU DEVIS' : 'NET À PAYER'}
+              </Text>
               <Text style={s.netValeur}>{eur(m.netAPayer)}</Text>
             </View>
           </View>
         </View>
 
         {/* ---------- Règlement ---------- */}
+        {/* Le bloc bancaire est remplacé, sur un devis, par la mention
+            d'acceptation : c'est ce qu'on attend du client à ce stade,
+            pas un virement. */}
+        {estDevis ? (
+          <View style={s.reglement} wrap={false}>
+            <Text style={s.blocTitre}>Acceptation</Text>
+            <Text style={{ color: GRIS, marginTop: 4 }}>
+              Bon pour accord — date, signature et mention manuscrite
+              « bon pour accord » du client.
+            </Text>
+            <Text style={{ color: GRIS, marginTop: 10 }}>
+              Ce devis est établi sans engagement de votre part. Passé le
+              {' '}{dateFr(m.dateEcheance)}, les prix indiqués ne sont plus garantis.
+            </Text>
+          </View>
+        ) : (
         <View style={s.reglement} wrap={false}>
           <Text style={s.blocTitre}>Règlement par virement</Text>
           <Text style={s.iban}>{e.iban}</Text>
@@ -300,6 +326,7 @@ export function documentFacture(m: ModeleFacture) {
             du virement.
           </Text>
         </View>
+        )}
 
         {soldee && (
           <View style={s.acquittee}>

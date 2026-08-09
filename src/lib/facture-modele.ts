@@ -12,7 +12,12 @@
  * la frontière serveur / client.
  */
 
-export type NatureFacture = 'facture' | 'acompte' | 'solde' | 'avoir';
+/* « devis » rejoint les natures de document commercial. Il partage tout
+   avec la facture — émetteur, destinataire, lignes, ventilation par taux —
+   et n'en diffère que par l'intitulé, la date affichée et le fait qu'il
+   n'appelle aucun paiement. Un gabarit distinct aurait dupliqué trois
+   cents lignes pour trois différences. */
+export type NatureFacture = 'facture' | 'acompte' | 'solde' | 'avoir' | 'devis';
 
 export type LigneFacture = {
   libelle: string;
@@ -235,6 +240,7 @@ export function mentionsLegales(m: ModeleFacture): string[] {
 /** Intitulé du document, selon sa nature. */
 export function intituleDocument(nature: NatureFacture): string {
   switch (nature) {
+    case 'devis':   return 'DEVIS';
     case 'avoir':   return 'AVOIR';
     case 'acompte': return "FACTURE D'ACOMPTE";
     case 'solde':   return 'FACTURE DE SOLDE';

@@ -146,6 +146,7 @@ function Tableau({ lignes, peutValider }: { lignes: Deplacement[]; peutValider: 
             <th style={th} className="col-secondaire">Motif</th>
             <th style={{ ...th, textAlign: 'right' }}>Km</th>
             <th style={{ ...th, textAlign: 'right' }}>Statut</th>
+            <th style={{ ...th, textAlign: 'right' }}></th>
             {peutValider && <th style={{ ...th, textAlign: 'right' }}>Action</th>}
           </tr>
         </thead>
@@ -172,6 +173,15 @@ function Tableau({ lignes, peutValider }: { lignes: Deplacement[]; peutValider: 
               </td>
               <td style={{ ...td, textAlign: 'right' }}>
                 <span className={`badge ${CLASSE_STATUT[d.statut]}`}>{LIBELLE_STATUT[d.statut]}</span>
+              </td>
+              {/* Même client, même adresse, souvent le même kilométrage.
+                  Pour un contrat hebdomadaire, c'est cinquante-deux fois
+                  quatre champs à retaper — seule la date change. */}
+              <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <Link href={`/deplacements/nouveau?refaire=${d.id}`}
+                  className="btn btn--ghost btn--sm">
+                  Refaire
+                </Link>
               </td>
               {peutValider && (
                 <td style={{ ...td, textAlign: 'right' }}>

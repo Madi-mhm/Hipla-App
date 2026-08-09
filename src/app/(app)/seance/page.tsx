@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
 import Header from '@/components/Header';
+import EtatAutomatismes, { type EtatTraitement } from '@/components/EtatAutomatismes';
+import ContratsAFacturer, { type EcheanceContrat } from './ContratsAFacturer';
 import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
@@ -23,23 +25,35 @@ export default async function Page() {
   // au moment où `seance_hebdomadaire` a été écrite, et l'élargir
   // obligerait à retoucher une fonction que six écrans lisent.
   //
-  // Le compte courant fait l'objet d'un troisième appel. `seance_hebdomadaire`
-  // le recalcule à sa façon — `sum(montant_ttc) where moyen_paiement =
-  // 'avance_associe'` — et manque les remboursements, écrits avec le moyen
-  // « virement ». Une fois remboursé, l'écran continuait donc d'annoncer une
-  // dette éteinte, indéfiniment, pendant que /associes affichait le bon solde.
-  //
-  // On lit la source, `solde_compte_courant()`, plutôt que de réécrire une
-  // fonction que six écrans partagent.
-  const [{ data, error }, { data: relances }, { data: comptesCourants }] =
+  // Le compte courant n'est plus lu ici : le bloc de chiffres a quitté cet
+  // écran pour le tableau de bord, où il n'était pas en double.
+  // L'état des traitements automatiques : une sauvegarde en échec écrivait
+  // jusqu'ici dans une table que personne ne consulte.
+  const [{ data, error }, { data: relances }, { data: sync }, { data: sauv },
+         { data: aFacturer }] =
     await Promise.all([
       supabase.rpc('seance_hebdomadaire'),
       supabase.rpc('a_relancer'),
-      supabase.rpc('solde_compte_courant'),
+      supabase.from('synchronisations')
+        .select('statut, demarree_le, erreur')
+        .order('demarree_le', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('sauvegardes')
+        .select('statut, demarree_le, erreur')
+        .order('demarree_le', { ascending: false }).limit(1).maybeSingle(),
+      // Les contrats font l'objet d'un appel à part, comme les relances :
+      // élargir `seance_hebdomadaire` obligerait à retoucher une fonction
+      // que six écrans lisent.
+      supabase.from('v_contrats_a_facturer').select('*').eq('echue', true),
     ]);
 
-  const compteCourant = ((comptesCourants ?? []) as Array<{ solde: number | string }>)
-    .reduce((t, s) => t + Number(s.solde), 0);
+  const etatSync: EtatTraitement = {
+    statut: sync?.statut ?? null, quand: sync?.demarree_le ?? null,
+    erreur: sync?.erreur ?? null,
+  };
+  const etatSauv: EtatTraitement = {
+    statut: sauv?.statut ?? null, quand: sauv?.demarree_le ?? null,
+    erreur: sauv?.erreur ?? null,
+  };
 
   if (error || !data) {
     return (
@@ -68,7 +82,10 @@ export default async function Page() {
         sousTitre="Tout ce qui attend une décision, en un seul endroit"
       />
       <div className="content">
-        <SeanceHebdo seance={seance} compteCourant={compteCourant} />
+        <EtatAutomatismes synchro={etatSync} sauvegarde={etatSauv} />
+        <ContratsAFacturer lignes={(aFacturer ?? []) as EcheanceContrat[]}
+          peutGerer={peut(profil.role, 'ventes', 'create')} />
+        <SeanceHebdo seance={seance} />
         <Relances
           lignes={(relances ?? []) as Relance[]}
           peutRelancer={peut(profil.role, 'ventes', 'update')}

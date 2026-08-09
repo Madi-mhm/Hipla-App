@@ -56,12 +56,37 @@ export default async function Page() {
   if (!peut(profil.role, 'depenses', 'read')) redirect('/');
 
   const supabase = await createClient();
-  const { data } = await supabase
-    .from('v_pieces_completes')
-    .select('*')
-    .in('nature', ['achat', 'creation'])
-    .order('date_piece', { ascending: false })
-    .limit(200);
+
+  // Les chiffres viennent d'`etat_achats()`, pas d'une addition faite ici.
+  //
+  // Cet écran recalculait ses quatre cartes en JavaScript, sur les 200
+  // lignes chargées — donc justes tant qu'il y a moins de 200 écritures,
+  // et faux ensuite, sans que rien ne le signale. La fonction existait
+  // déjà en base, maintenue jusqu'à la migration 067, et n'était appelée
+  // de nulle part.
+  //
+  // Elle compte les indemnités kilométriques parmi les charges, comme le
+  // tableau de bord et le fichier des écritures. La liste ci-dessous les
+  // inclut donc aussi : une carte et une liste qui ne portent pas sur le
+  // même ensemble sont une invitation à se tromper.
+  const [{ data }, { data: etatBrut }] = await Promise.all([
+    supabase
+      .from('v_pieces_completes')
+      .select('*')
+      .in('nature', ['achat', 'creation', 'km'])
+      .order('date_piece', { ascending: false })
+      .limit(200),
+    supabase.rpc('etat_achats'),
+  ]);
+
+  const etat = (etatBrut ?? {}) as {
+    a_valider?: number; rejetees?: number; validees?: number;
+    charges_ht?: number; tva_deductible?: number;
+    sans_justificatif?: number; sans_banque?: number;
+  };
+
+  const totalEcritures =
+    Number(etat.a_valider ?? 0) + Number(etat.validees ?? 0) + Number(etat.rejetees ?? 0);
 
   const depenses: Ligne[] = (data ?? []).map((p) => ({
     ...p,
@@ -70,31 +95,23 @@ export default async function Page() {
 
   const attente = depenses.filter((d) => d.statut === 'en_attente');
   const validees = depenses.filter((d) => d.statut === 'validee');
-  const annulees = depenses.filter((d) => d.statut === 'annulee');
+
 
   // Ce qui manque, sur les seules écritures entrées en comptabilité :
   // un brouillon sans facture n'est pas encore une anomalie.
   // La vue sait désormais quelles charges appellent VRAIMENT une facture :
   // un frais bancaire est justifié par le relevé, une indemnité
   // kilométrique par le carnet de trajets.
-  const sansJustificatif = depenses.filter((d) => d.facture_manquante);
   const sansBanque = depenses.filter((d) => d.banque_manquante);
   const aCompleter = depenses.filter((d) => d.facture_manquante || d.banque_manquante);
 
-  // Un avoir fournisseur va dans l'autre sens : il RETRANCHE. Additionner
-  // les montants sans regarder le sens gonflait les charges du double du
-  // montant — une remise de 18 € comptée comme une dépense de 18 €.
-  //
-  // Le coût réel d'un achat comprend la TVA qu'on n'a pas pu déduire :
-  // c'est une charge, pas une taxe. Sans ce terme, cet écran annonçait
-  // 453,55 € là où le tableau de bord et le fichier des écritures
-  // disaient 453,63 € — huit centimes, mais deux définitions.
-  const signe = (d: Ligne) => (d.sens === 'credit' ? -1 : 1);
-  const charge = (d: Ligne) =>
-    signe(d) * (Number(d.montant_ht)
-      + Math.max(Number(d.montant_tva) - Math.abs(Number(d.tva_comptable)), 0));
-  const totalHT = validees.reduce((s, d) => s + charge(d), 0);
-  const totalTVA = validees.reduce((s, d) => s + Number(d.tva_comptable), 0);
+  // La règle du coût réel — hors taxes plus la TVA non déductible, un
+  // avoir retranchant au lieu d'ajouter — était réécrite ici en
+  // TypeScript. Elle vit dans `charge_comptable()` depuis la migration
+  // 057, et c'est cette version qu'`etat_achats` applique. Une règle,
+  // une implémentation.
+  const totalHT = Number(etat.charges_ht ?? 0);
+  const totalTVA = Number(etat.tva_deductible ?? 0);
   const avoirs = validees.filter((d) => d.sens === 'credit');
 
   const peutValider = peut(profil.role, 'depenses', 'validate');
@@ -102,7 +119,13 @@ export default async function Page() {
 
   return (
     <>
-      <Header titre="Dépenses" sousTitre={`${depenses.length} enregistrées`} />
+      {/* L'en-tête annonçait « 200 enregistrées » qu'il y en ait 200 ou
+          2 000 : la liste est plafonnée, le total ne l'est pas. */}
+      <Header titre="Dépenses" sousTitre={
+        depenses.length < totalEcritures
+          ? `${depenses.length} affichées sur ${totalEcritures}`
+          : `${totalEcritures} enregistrées`
+      } />
 
       <div className="content">
         <div className="grid-cards" style={{ marginBottom: '1.25rem' }}>
@@ -125,12 +148,12 @@ export default async function Page() {
           <div className="card">
             <p className="card__title">Sans justificatif</p>
             <p className="amount" style={{
-              ...chiffre, color: sansJustificatif.length ? 'var(--danger)' : undefined,
+              ...chiffre, color: etat.sans_justificatif ? 'var(--danger)' : undefined,
             }}>
-              {sansJustificatif.length}
+              {etat.sans_justificatif ?? 0}
             </p>
             <p className="muted" style={petit}>
-              {sansJustificatif.length
+              {etat.sans_justificatif
                 ? 'TVA non déductible en l\u2019état'
                 : 'Toutes les pièces sont justifiées'}
             </p>
@@ -138,12 +161,12 @@ export default async function Page() {
           <div className="card">
             <p className="card__title">En attente de validation</p>
             <p className="amount" style={{
-              ...chiffre, color: attente.length ? 'var(--warning)' : undefined,
+              ...chiffre, color: etat.a_valider ? 'var(--warning)' : undefined,
             }}>
-              {attente.length}
+              {etat.a_valider ?? 0}
             </p>
             <p className="muted" style={petit}>
-              {annulees.length} annulée{annulees.length > 1 ? 's' : ''}, hors totaux
+              {etat.rejetees ?? 0} rejetée{(etat.rejetees ?? 0) > 1 ? 's' : ''}, hors totaux
             </p>
           </div>
         </div>
@@ -155,6 +178,11 @@ export default async function Page() {
             </Link>
             <Link href="/depenses/nouvelle" className="btn btn--ghost">
               + Saisie manuelle
+            </Link>
+            {/* La recherche existait sans qu'aucune liste n'y mène : on
+                l'atteignait par le menu, ou pas du tout. */}
+            <Link href="/recherche" className="btn btn--ghost">
+              Rechercher
             </Link>
           </div>
         )}
