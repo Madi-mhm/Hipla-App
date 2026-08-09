@@ -498,13 +498,17 @@ async function constaterEcheance(
     statut: 'payee',
     date_constatee: t?.date_operation ?? null,
     montant_reel: a.montant_ttc,
-    depense_id: dep.id,
+    // `piece_id`, pas `depense_id` : la table `depenses` a été
+    // supprimée, et l'ancienne colonne ne fait plus que subsister.
+    piece_id: dep.id,
     transaction_qonto_id: transactionId,
   }).eq('id', echeanceId);
 
   await db.from('transactions_qonto').update({
     statut_traitement: 'rattachee',
-    depense_id: dep.id,
+    // `piece_id`, pas `depense_id` : la table `depenses` a été
+    // supprimée, et l'ancienne colonne ne fait plus que subsister.
+    piece_id: dep.id,
     echeance_id: echeanceId,
     rattachement_auto: true,
     rattache_le: new Date().toISOString(),

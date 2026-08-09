@@ -214,7 +214,9 @@ export default function ListeAbonnements({
       statut: 'payee',
       date_constatee: new Date().toISOString().slice(0, 10),
       montant_reel: abo.montant_ttc,
-      depense_id: dep.id,
+      // `piece_id`, pas `depense_id` : la table `depenses` a été
+      // supprimée, et l'ancienne colonne ne fait plus que subsister.
+      piece_id: dep.id,
     }).eq('id', e.id);
 
     setSucces(
