@@ -18,11 +18,13 @@ export default async function Page() {
 
   const [{ data: tx }, { data: synchros }, { data: controle }, { data: cats }] =
     await Promise.all([
-      // Deux clés étrangères relient ces tables — depense_id d'un côté,
-      // transaction_qonto_id de l'autre. PostgREST ne peut pas choisir seul :
-      // la contrainte à emprunter doit être nommée explicitement.
+      // L'écriture liée passait par `depenses`, table que le registre a
+      // remplacée : `confirmer_appariement` ne renseigne plus `depense_id`.
+      // La colonne « Écriture » était donc vide sur toute opération
+      // rapprochée depuis la bascule. Le lien vit maintenant dans
+      // `reglements`, résolu juste en dessous.
       supabase.from('transactions_qonto')
-        .select('*, depenses!transactions_qonto_depense_id_fkey(numero_piece, fournisseur)')
+        .select('*')
         .order('date_operation', { ascending: false })
         .limit(300),
       supabase.from('synchronisations')
@@ -35,12 +37,45 @@ export default async function Page() {
     .from('v_justificatifs_qonto')
     .select('*', { count: 'exact', head: true });
 
+  /* Écriture rattachée à chaque opération.
+     Une requête séparée plutôt qu'une jointure imbriquée : le nom de la
+     contrainte n'a pas à être deviné, et une opération peut porter
+     plusieurs règlements — un acompte puis un solde. On garde le premier
+     et l'on signale le nombre. */
+  const idsTx = (tx ?? []).map((t) => t.id as string);
+  const { data: regl } = idsTx.length
+    ? await supabase.from('reglements')
+        .select('transaction_id, piece_id, pieces(numero_piece, tiers_libelle)')
+        .in('transaction_id', idsTx)
+    : { data: [] as unknown[] };
+
+  const parTransaction = new Map<string, { piece_id: string; numero_piece: string | null;
+                                           tiers: string | null; nombre: number }>();
+  for (const r of (regl ?? []) as Array<{
+    transaction_id: string; piece_id: string;
+    pieces: { numero_piece: string | null; tiers_libelle: string | null } | null;
+  }>) {
+    const dejaVu = parTransaction.get(r.transaction_id);
+    if (dejaVu) { dejaVu.nombre += 1; continue; }
+    parTransaction.set(r.transaction_id, {
+      piece_id: r.piece_id,
+      numero_piece: r.pieces?.numero_piece ?? null,
+      tiers: r.pieces?.tiers_libelle ?? null,
+      nombre: 1,
+    });
+  }
+
+  const transactions = (tx ?? []).map((t) => ({
+    ...t,
+    ecriture: parTransaction.get(t.id as string) ?? null,
+  }));
+
   return (
     <>
       <Header titre="Banque" sousTitre="Opérations Qonto et rapprochement" />
       <div className="content">
         <Banque
-          transactions={(tx ?? []) as TransactionQonto[]}
+          transactions={transactions as TransactionQonto[]}
           synchronisations={(synchros ?? []) as Synchronisation[]}
           controle={controle}
           categories={(cats ?? []) as Categorie[]}

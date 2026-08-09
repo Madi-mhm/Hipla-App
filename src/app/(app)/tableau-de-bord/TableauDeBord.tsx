@@ -49,7 +49,9 @@ const TEINTES = [
   '#c08730', '#d4a256', '#8a5f1c', '#5f6a75',
 ];
 
-export default function TableauDeBord({ bord }: { bord: Bord }) {
+export default function TableauDeBord(
+  { bord, compteCourant }: { bord: Bord; compteCourant: number },
+) {
   const t = bord.tresorerie;
   const resultat = Number(bord.produits_total) - Number(bord.charges_total);
   const anomalies = bord.controles.filter((c) => !c.ok);
@@ -74,9 +76,15 @@ export default function TableauDeBord({ bord }: { bord: Bord }) {
 
         <div style={herosDroite}>
           <ChiffreHeros titre="Solde bancaire" valeur={Number(t.solde_banque)} />
-          <ChiffreHeros titre="Crédit de TVA" valeur={Math.abs(Number(t.tva_a_payer))}
-            note={Number(t.tva_a_payer) >= 0 ? 'à reverser' : 'récupérable'} />
-          <ChiffreHeros titre="Compte courant" valeur={Number(t.compte_courant)}
+          {/* Le titre disait « Crédit de TVA » même quand la TVA était due :
+              on lisait « Crédit de TVA · 250,00 € · à reverser ». */}
+          <ChiffreHeros
+            titre={Number(t.tva_a_payer) >= 0 ? 'TVA à reverser' : 'Crédit de TVA'}
+            valeur={Math.abs(Number(t.tva_a_payer))}
+            note={Number(t.tva_a_payer) >= 0 ? 'due au Trésor' : 'récupérable'} />
+          {/* Lu depuis `solde_compte_courant()` : `t.compte_courant` ne
+              soustrait pas les remboursements et ignore les apports. */}
+          <ChiffreHeros titre="Compte courant" valeur={compteCourant}
             note="dû aux associés" />
         </div>
       </section>
@@ -106,8 +114,10 @@ export default function TableauDeBord({ bord }: { bord: Bord }) {
               : `${anomalies.length} point${anomalies.length > 1 ? 's' : ''} à reprendre`}
           </p>
           <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.15rem' }}>
+            {/* Le nombre était écrit en toutes lettres et disait « six » alors
+                que la migration 067 en a ajouté un septième. On le compte. */}
             {anomalies.length === 0
-              ? 'Six contrôles croisés, aucun écart'
+              ? `${bord.controles.length} contrôles croisés, aucun écart`
               : anomalies.map((a) => a.libelle).join(' · ')}
           </p>
         </div>
@@ -144,7 +154,7 @@ export default function TableauDeBord({ bord }: { bord: Bord }) {
             alerte={Number(t.echu_non_regle) > 0} />
           <Engagement titre="Reste à payer" valeur={Number(t.a_payer)}
             note="Dettes fournisseurs ouvertes" />
-          <Engagement titre="Compte courant d'associé" valeur={Number(t.compte_courant)}
+          <Engagement titre="Compte courant d'associé" valeur={compteCourant}
             note="Remboursable sans impôt ni charge" />
         </div>
       </div>

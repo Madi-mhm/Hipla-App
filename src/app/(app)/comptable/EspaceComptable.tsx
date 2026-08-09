@@ -15,7 +15,6 @@ import Reference from '@/components/Reference';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { money, date, dateLong, daysUntil } from '@/lib/format';
-import { ECHEANCES } from '@/lib/echeances';
 import {
   LIBELLE_TYPE_ANOMALIE, LIBELLE_TYPE_COMMENTAIRE, CLASSE_TYPE_COMMENTAIRE,
   LIBELLE_STATUT_TACHE, CLASSE_STATUT_TACHE, LIBELLE_PRIORITE,
@@ -29,6 +28,16 @@ type Exercice = {
   statut: string; regime_tva: string;
 } | null;
 
+/** Échéance déclarative, telle que `v_echeances` la renvoie. */
+export type EcheanceDeclarative = {
+  id: string;
+  echeance: string;
+  libelle: string;
+  detail: string | null;
+  nature: string | null;
+  accomplie: boolean;
+};
+
 type Props = {
   exercice: Exercice;
   chiffres: {
@@ -38,11 +47,12 @@ type Props = {
   anomalies: Anomalie[];
   commentaires: Commentaire[];
   taches: Tache[];
+  echeances: EcheanceDeclarative[];
   utilisateurId: string;
 };
 
 export default function EspaceComptable({
-  exercice, chiffres, anomalies, commentaires, taches, utilisateurId,
+  exercice, chiffres, anomalies, commentaires, taches, echeances, utilisateurId,
 }: Props) {
   const router = useRouter();
   const [nouveauCommentaire, setNouveauCommentaire] = useState('');
@@ -213,22 +223,40 @@ export default function EspaceComptable({
       {/* ---------- Échéances ---------- */}
       <div className="card" style={{ marginBottom: '1.25rem' }}>
         <p className="card__title">Échéances déclaratives</p>
+        {echeances.length === 0 ? (
+          <div className="etat-vide">
+            <p>Aucune obligation enregistrée.</p>
+            <p className="muted">Réglages → Entreprise.</p>
+          </div>
+        ) : (
         <div className="table-scroll">
           <table style={{ minWidth: 440, fontSize: 'var(--fs-sm)' }}>
             <tbody>
-              {ECHEANCES.map((e) => {
-                const j = daysUntil(e.date);
+              {echeances.map((e) => {
+                const j = daysUntil(e.echeance);
                 return (
-                  <tr key={e.libelle} style={{ borderBottom: '1px solid var(--g-200)' }}>
-                    <td style={td}>{e.libelle}</td>
+                  <tr key={e.id} style={{
+                    borderBottom: '1px solid var(--g-200)',
+                    opacity: e.accomplie ? 0.55 : 1,
+                  }}>
+                    <td style={td}>
+                      {e.libelle}
+                      {e.detail && (
+                        <span className="muted" style={{ display: 'block', fontSize: 'var(--fs-xs)' }}>
+                          {e.detail}
+                        </span>
+                      )}
+                    </td>
                     <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      {dateLong(e.date)}
+                      {dateLong(e.echeance)}
                     </td>
                     <td style={{ ...td, textAlign: 'right', width: 90 }}>
                       <span className={`badge ${
-                        j < 0 ? 'badge--danger' : j <= 30 ? 'badge--warning' : 'badge--neutral'
+                        e.accomplie ? 'badge--success'
+                        : j < 0 ? 'badge--danger'
+                        : j <= 30 ? 'badge--warning' : 'badge--neutral'
                       }`}>
-                        {j < 0 ? 'dépassée' : `J-${j}`}
+                        {e.accomplie ? 'accomplie' : j < 0 ? 'dépassée' : `J-${j}`}
                       </span>
                     </td>
                   </tr>
@@ -237,6 +265,7 @@ export default function EspaceComptable({
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       {/* ---------- Exports ---------- */}

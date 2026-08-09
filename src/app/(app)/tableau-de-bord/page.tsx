@@ -15,7 +15,17 @@ export default async function Page() {
   if (!peut(profil.role, 'depenses', 'read')) redirect('/');
 
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc('tableau_de_bord');
+
+  // `tableau_de_bord` recalcule le compte courant à sa façon et manque
+  // les remboursements — écrits avec le moyen « virement », hors de son
+  // filtre — comme les apports, qui créditent le 4551. On lit la source.
+  const [{ data, error }, { data: comptesCourants }] = await Promise.all([
+    supabase.rpc('tableau_de_bord'),
+    supabase.rpc('solde_compte_courant'),
+  ]);
+
+  const compteCourant = ((comptesCourants ?? []) as Array<{ solde: number | string }>)
+    .reduce((t, s) => t + Number(s.solde), 0);
 
   if (error || !data) {
     return (
@@ -44,7 +54,7 @@ export default async function Page() {
         sousTitre={`Exercice du ${dateLong(bord.exercice_debut)} au ${dateLong(bord.exercice_fin)}`}
       />
       <div className="content">
-        <TableauDeBord bord={bord} />
+        <TableauDeBord bord={bord} compteCourant={compteCourant} />
       </div>
     </>
   );

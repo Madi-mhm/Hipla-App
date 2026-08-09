@@ -83,12 +83,17 @@ export type SoldeAssocie = {
   avance: number; rembourse: number; solde: number; lignes: number;
 };
 
+/** Associé au sens de la table `associes` : l'identifiant est la clé
+    portée par `pieces.paye_par`. */
+export type Associe = { identifiant: string; prenom: string; nom: string };
+
 type Props = {
   transaction: Transaction;
   categories: Categorie[];
   candidats: CandidatPiece[];
   ouvertes: EcritureOuverte[];
   soldes: SoldeAssocie[];
+  associes: Associe[];
   urlJustificatif: string | null;
   ecriture: Ecriture;
   regle: Record<string, unknown> | null;
@@ -106,7 +111,7 @@ const COMPTES_DIVERS = [
 ];
 
 export default function DetailTransaction({
-  transaction: t, categories, candidats, ouvertes, soldes, urlJustificatif,
+  transaction: t, categories, candidats, ouvertes, soldes, associes, urlJustificatif,
   ecriture, regle, peutGerer,
 }: Props) {
   const router = useRouter();
@@ -132,6 +137,11 @@ export default function DetailTransaction({
   const [associeChoisi, setAssocieChoisi] = useState(
     soldes.find((x) => Number(x.solde) >= Math.abs(Number(t.montant)))?.associe
     ?? soldes[0]?.associe ?? '');
+
+  // Apport ou remboursement en compte courant : l'associé concerné.
+  // `creer_operation_banque` écrivait « societe » en dur — un mouvement
+  // de 4551 n'entrait donc dans le solde de personne.
+  const [associeDivers, setAssocieDivers] = useState(associes[0]?.identifiant ?? '');
 
   // Avoir fournisseur
   const [avoirTiers, setAvoirTiers] = useState(t.contrepartie ?? t.libelle);
@@ -245,6 +255,9 @@ export default function DetailTransaction({
 
   async function creerDivers() {
     if (!compte) { setErreur('Choisissez un compte.'); return; }
+    if (compte === '4551' && !associeDivers) {
+      setErreur('Choisissez l\u2019associé concerné.'); return;
+    }
     setEnCours(true);
     setErreur(null);
     const supabase = createClient();
@@ -255,6 +268,7 @@ export default function DetailTransaction({
       p_libelle: libelleDivers.trim()
         || comptesPossibles.find((c) => c.compte === compte)?.libelle
         || t.libelle,
+      p_associe: compte === '4551' ? associeDivers : null,
     });
 
     if (error) { setErreur(`Création impossible — ${error.message}`); setEnCours(false); return; }
@@ -650,10 +664,34 @@ export default function DetailTransaction({
               <input type="text" value={libelleDivers}
                 onChange={(e) => setLibelleDivers(e.target.value)}
                 placeholder="Libération du capital social" /></label>
+
+            {/* Un mouvement de compte courant appartient à quelqu'un :
+                sans titulaire, il n'entre dans aucun solde. */}
+            {compte === '4551' && (
+              <label><span>Associé concerné *</span>
+                <select value={associeDivers}
+                  onChange={(e) => setAssocieDivers(e.target.value)}>
+                  <option value="">Choisir…</option>
+                  {associes.map((a) => (
+                    <option key={a.identifiant} value={a.identifiant}>
+                      {a.prenom} {a.nom}
+                    </option>
+                  ))}
+                </select></label>
+            )}
           </div>
 
+          {compte === '4551' && (
+            <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.6rem' }}>
+              {t.sens === 'credit'
+                ? 'Apport : la société devra cette somme à l\u2019associé.'
+                : 'Remboursement : la dette de la société diminue d\u2019autant.'}
+            </p>
+          )}
+
           <div style={{ marginTop: '1rem' }}>
-            <button onClick={creerDivers} disabled={enCours || !compte}
+            <button onClick={creerDivers}
+              disabled={enCours || !compte || (compte === '4551' && !associeDivers)}
               className="btn btn--ghost">
               Comptabiliser
             </button>

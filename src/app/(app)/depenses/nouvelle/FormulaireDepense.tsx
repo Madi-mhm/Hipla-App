@@ -48,8 +48,21 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
   const [dialogueSansPiece, setDialogueSansPiece] = useState(false);
+  const [dialogueAbandon, setDialogueAbandon] = useState(false);
 
   const categorie = categories.find((c) => c.id === categorieId) ?? null;
+
+  /* « Annuler » jetait la saisie et les photos jointes d'un seul clic, à côté
+     d'« Enregistrer ». Sur un téléphone, une photo perdue est un déplacement
+     refait. On ne demande confirmation que si quelque chose a été saisi. */
+  const modifie =
+    fournisseur.trim() !== '' || libelle.trim() !== '' || categorieId !== ''
+    || montant.trim() !== '' || notes.trim() !== '' || fichiers.length > 0;
+
+  function quitter() {
+    if (modifie) { setDialogueAbandon(true); return; }
+    router.push('/depenses');
+  }
 
   const montants = useMemo(() => {
     const v = parseFloat(montant.replace(',', '.'));
@@ -187,6 +200,21 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
       libelleValider="Enregistrer quand même"
       onValider={() => { setDialogueSansPiece(false); enregistrer(); }}
       onAnnuler={() => setDialogueSansPiece(false)}
+    />
+
+    <Dialogue
+      ouvert={dialogueAbandon}
+      titre="Abandonner cette saisie"
+      description={
+        fichiers.length > 0
+          ? `La saisie et ${fichiers.length} justificatif${fichiers.length > 1 ? 's' : ''} `
+            + 'joint' + (fichiers.length > 1 ? 's' : '') + ' seront perdus.'
+          : 'Ce qui a été saisi sera perdu.'
+      }
+      libelleValider="Abandonner"
+      danger
+      onValider={() => { setDialogueAbandon(false); router.push('/depenses'); }}
+      onAnnuler={() => setDialogueAbandon(false)}
     />
 
     <form onSubmit={soumettre} className={styles.form}>
@@ -355,7 +383,7 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
         <button type="submit" className="btn btn--gold" disabled={enCours || categorie?.bloque}>
           {enCours ? 'Enregistrement…' : peutValider ? 'Enregistrer' : 'Soumettre à validation'}
         </button>
-        <button type="button" className="btn btn--ghost" onClick={() => router.push('/depenses')}>
+        <button type="button" className="btn btn--ghost" onClick={quitter}>
           Annuler
         </button>
       </div>

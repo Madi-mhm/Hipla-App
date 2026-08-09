@@ -52,7 +52,9 @@ export type Seance = {
   close: boolean;
 };
 
-export default function SeanceHebdo({ seance }: { seance: Seance }) {
+export default function SeanceHebdo(
+  { seance, compteCourant }: { seance: Seance; compteCourant: number },
+) {
   const router = useRouter();
   const [enCours, setEnCours] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -160,11 +162,16 @@ export default function SeanceHebdo({ seance }: { seance: Seance }) {
                 )}
               </div>
               <div style={{ display: 'flex', gap: '.4rem' }}>
-                <RefBanque id={p.transaction_id} className="btn btn--ghost"
+                <RefBanque id={p.transaction_id} className="btn btn--ghost btn--sm"
                   style={petitBouton}>Examiner</RefBanque>
+                {/* `enCours` porte l'identifiant de la ligne en cours : le test
+                    doit s'y comparer. Comparé à `null`, il éteignait tous les
+                    boutons de la page pendant qu'une seule ligne travaillait,
+                    sans rien indiquer — l'écran paraissait figé. */}
                 <button onClick={() => confirmer(p.piece_id, p.transaction_id)}
-                  disabled={enCours !== null} className="btn btn--gold" style={petitBouton}>
-                  Confirmer
+                  disabled={enCours === p.transaction_id}
+                  className="btn btn--gold btn--sm" style={petitBouton}>
+                  {enCours === p.transaction_id ? 'Confirmation…' : 'Confirmer'}
                 </button>
               </div>
             </div>
@@ -202,7 +209,7 @@ export default function SeanceHebdo({ seance }: { seance: Seance }) {
                   {t.regle?.libelle && ` · règle « ${t.regle.libelle} »`}
                 </p>
               </div>
-              <RefBanque id={t.id} className="btn btn--gold" style={petitBouton}>
+              <RefBanque id={t.id} className="btn btn--gold btn--sm" style={petitBouton}>
                 Affecter
               </RefBanque>
             </div>
@@ -241,11 +248,11 @@ export default function SeanceHebdo({ seance }: { seance: Seance }) {
                 )}
               </div>
               <div style={{ display: 'flex', gap: '.4rem' }}>
-                <Reference id={p.id} className="btn btn--ghost"
+                <Reference id={p.id} className="btn btn--ghost btn--sm"
                   style={petitBouton}>Examiner</Reference>
-                <button onClick={() => valider(p.id)} disabled={enCours !== null}
-                  className="btn btn--gold" style={petitBouton}>
-                  Valider
+                <button onClick={() => valider(p.id)} disabled={enCours === p.id}
+                  className="btn btn--gold btn--sm" style={petitBouton}>
+                  {enCours === p.id ? 'Validation…' : 'Valider'}
                 </button>
               </div>
             </div>
@@ -273,7 +280,7 @@ export default function SeanceHebdo({ seance }: { seance: Seance }) {
                   {a.detail}
                 </p>
               </div>
-              <Link href={a.lien} className="btn btn--ghost" style={petitBouton}>
+              <Link href={a.lien} className="btn btn--ghost btn--sm" style={petitBouton}>
                 Corriger
               </Link>
             </div>
@@ -328,8 +335,11 @@ export default function SeanceHebdo({ seance }: { seance: Seance }) {
             note="Exigible, sur paiements" />
           <Chiffre titre="Solde de TVA" valeur={ch.tva_collectee - ch.tva_deductible}
             note={ch.tva_collectee - ch.tva_deductible >= 0 ? 'À payer' : 'À récupérer'} />
-          <Chiffre titre="Compte courant d'associé" valeur={ch.compte_courant}
-            note="Ce que la société doit aux associés" />
+          {/* Valeur lue depuis `solde_compte_courant()`, et non depuis
+              `ch.compte_courant` : ce dernier ne soustrait pas les
+              remboursements et ne connaît pas les apports. */}
+          <Chiffre titre="Compte courant d'associé" valeur={compteCourant}
+            note="Avances et apports, moins les remboursements" />
         </div>
 
         <p className="muted" style={{
@@ -364,6 +374,7 @@ const ligne: React.CSSProperties = {
   gap: '1rem', flexWrap: 'wrap',
   padding: '.75rem 0', borderBottom: '1px solid var(--g-200)',
 };
-const petitBouton: React.CSSProperties = {
-  minHeight: 30, padding: '.2rem .7rem', fontSize: '.72rem', whiteSpace: 'nowrap',
-};
+/* La hauteur et la taille de police viennent désormais de `.btn--sm` :
+   une seule définition, tenable, au lieu d'un objet par écran. Il ne
+   reste ici que ce que la classe ne peut pas porter. */
+const petitBouton: React.CSSProperties = { whiteSpace: 'nowrap' };

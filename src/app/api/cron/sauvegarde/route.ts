@@ -19,21 +19,67 @@ import { deposer, lister, supprimer, r2Configure } from '@/lib/r2';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-/** Tables sauvegardées, dans l'ordre des dépendances. */
-const TABLES = [
-  'entreprise', 'exercices', 'profils', 'permissions',
-  'categories', 'vehicules', 'bareme_km', 'fournisseurs_connus',
-  // Les compteurs doivent suivre : sans eux, une restauration
-  // réattribuerait des numéros de pièce déjà utilisés.
-  'compteurs_piece',
-  'depenses', 'justificatifs', 'deplacements', 'frais_creation',
-  'abonnements', 'abonnement_echeances', 'commentaires', 'taches',
-  'transactions_qonto', 'libelles_bancaires',
-  'usage_ia', 'sauvegardes', 'synchronisations', 'audit',
-] as const;
+/**
+ * Les tables ne sont plus énumérées ici.
+ *
+ * Cette liste comptait 23 entrées quand la base en avait 42. Manquaient
+ * `pieces`, `pieces_lignes`, `reglements`, `tiers`, `immobilisations`,
+ * `declarations_tva` — tout le registre. Elle nommait encore `depenses`
+ * et `frais_creation`, vidées par la bascule. Le cron écrivait
+ * « réussie » et archivait à peu près rien de ce qui compte.
+ *
+ * Une liste qui a dérivé une fois dérivera encore. La base énumère
+ * désormais ses propres tables (`tables_publiques`, migration 085).
+ */
+
+/** Lignes lues par requête. PostgREST plafonne les réponses : sans
+ *  pagination, une table dépassant le plafond était tronquée en
+ *  silence, et la sauvegarde s'en déclarait satisfaite. */
+const LOT = 1000;
 
 /** Dumps hebdomadaires conservés, en semaines. Les dumps du 1er du mois sont gardés. */
 const RETENTION_SEMAINES = 12;
+
+/**
+ * Lit une table ENTIÈRE, par lots, et vérifie le compte.
+ *
+ * `select('*')` sans pagination s'arrête au plafond de PostgREST — mille
+ * lignes par défaut. `audit` le franchira dans l'année. La sauvegarde
+ * aurait continué à se déclarer réussie sur un dump amputé, ce qui est
+ * pire qu'un échec : on aurait cru la copie fidèle.
+ *
+ * Le compte exact est demandé d'abord ; si la lecture ne le retrouve
+ * pas, on lève. Une sauvegarde incomplète doit être une erreur, jamais
+ * un succès silencieux.
+ */
+async function lireTable(
+  db: ReturnType<typeof admin>,
+  table: string,
+): Promise<unknown[]> {
+  const { count, error: eCount } = await db
+    .from(table).select('*', { count: 'exact', head: true });
+  if (eCount) throw new Error(`Comptage de « ${table} » : ${eCount.message}`);
+
+  const attendu = count ?? 0;
+  const lignes: unknown[] = [];
+
+  for (let debut = 0; debut < attendu; debut += LOT) {
+    const { data, error } = await db
+      .from(table).select('*').range(debut, debut + LOT - 1);
+    if (error) throw new Error(`Lecture de « ${table} » : ${error.message}`);
+    if (!data || data.length === 0) break;
+    lignes.push(...data);
+  }
+
+  if (lignes.length !== attendu) {
+    throw new Error(
+      `« ${table} » : ${lignes.length} ligne(s) lue(s) pour ${attendu} attendue(s). ` +
+      `Sauvegarde interrompue plutôt qu'incomplète.`
+    );
+  }
+
+  return lignes;
+}
 
 function admin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -103,22 +149,42 @@ async function executer(declencheur: 'cron' | 'manuel', utilisateur: string | nu
 
     // ---------- 1. Export de la base ----------
     const horodatage = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+    // La liste vient de la base, pas d'une constante. Toute table créée
+    // par une migration future entre dans la sauvegarde sans que
+    // personne ait à y penser.
+    const { data: tables, error: eTables } = await db.rpc('tables_publiques');
+    if (eTables) throw new Error(`Énumération des tables : ${eTables.message}`);
+
+    const nomsTables = (tables as unknown as Array<string | { tables_publiques: string }>)
+      .map((t) => (typeof t === 'string' ? t : t.tables_publiques));
+
+    if (nomsTables.length === 0) {
+      throw new Error('Aucune table retournée : la migration 085 est-elle appliquée ?');
+    }
+
     const dump: Record<string, { lignes: number; donnees: unknown[] }> = {};
     let lignesTotales = 0;
 
-    for (const table of TABLES) {
-      const { data, error } = await db.from(table).select('*');
-      if (error) throw new Error(`Lecture de « ${table} » : ${error.message}`);
-      dump[table] = { lignes: data?.length ?? 0, donnees: data ?? [] };
-      lignesTotales += data?.length ?? 0;
+    for (const table of nomsTables) {
+      const donnees = await lireTable(db, table);
+      dump[table] = { lignes: donnees.length, donnees };
+      lignesTotales += donnees.length;
     }
 
+    // Le schéma : 135 fonctions et 15 vues qui ne figuraient dans aucune
+    // sauvegarde. Un dump de lignes sans le schéma qui les fait vivre ne
+    // se restaure nulle part.
+    const { data: schema, error: eSchema } = await db.rpc('schema_public');
+    if (eSchema) throw new Error(`Lecture du schéma : ${eSchema.message}`);
+
     const contenu = JSON.stringify({
-      version: 1,
+      version: 2,
       genere_le: new Date().toISOString(),
       declencheur,
+      schema,
       tables: dump,
-      totaux: { tables: TABLES.length, lignes: lignesTotales },
+      totaux: { tables: nomsTables.length, lignes: lignesTotales },
     }, null, 2);
 
     const cleDump = `base/${horodatage}.json`;
@@ -130,14 +196,16 @@ async function executer(declencheur: 'cron' | 'manuel', utilisateur: string | nu
       (await lister('fichiers/')).map((o) => o.cle.replace(/^fichiers\//, ''))
     );
 
-    const { data: justificatifs } = await db
-      .from('justificatifs')
-      .select('chemin, nom_original, type_mime');
+    // Paginé comme le reste : au-delà du plafond, des justificatifs
+    // n'auraient jamais été copiés, sans que rien ne le signale.
+    const justificatifs = await lireTable(db, 'justificatifs') as Array<{
+      chemin: string; nom_original: string; type_mime: string;
+    }>;
 
     let copies = 0, ignores = 0, octets = 0;
     const echecs: string[] = [];
 
-    for (const j of justificatifs ?? []) {
+    for (const j of justificatifs) {
       if (dejaPresents.has(j.chemin)) { ignores += 1; continue; }
 
       const { data: blob, error } = await db.storage
@@ -163,7 +231,7 @@ async function executer(declencheur: 'cron' | 'manuel', utilisateur: string | nu
         Object.entries(dump).map(([t, v]) => [t, v.lignes])
       ),
       fichiers: {
-        total: justificatifs?.length ?? 0,
+        total: justificatifs.length,
         copies, ignores, octets,
         echecs: echecs.length ? echecs : undefined,
       },
@@ -194,18 +262,20 @@ async function executer(declencheur: 'cron' | 'manuel', utilisateur: string | nu
         chemin_dump: cleDump,
         taille_dump: tailleDump,
         lignes_totales: lignesTotales,
-        tables_sauvees: TABLES.length,
+        tables_sauvees: nomsTables.length,
         fichiers_copies: copies,
         fichiers_ignores: ignores,
         octets_copies: octets,
         duree_ms: duree,
-        detail: { purges, echecs: echecs.length ? echecs : null },
+        detail: { purges, tables: nomsTables.length,
+                  echecs: echecs.length ? echecs : null },
       }).eq('id', idJournal);
     }
 
     return NextResponse.json({
       succes: true,
       dump: cleDump,
+      tables: nomsTables.length,
       lignes: lignesTotales,
       fichiers: { copies, ignores },
       purges,

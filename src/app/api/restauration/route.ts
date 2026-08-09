@@ -21,28 +21,21 @@ import { lire, lister, r2Configure } from '@/lib/r2';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-/** Ordre imposé par les dépendances entre tables. */
-const ORDRE = [
-  'entreprise',
-  'exercices',
-  'categories',
-  'vehicules',
-  'bareme_km',
-  'fournisseurs_connus',
-  'libelles_bancaires',
-  // Restauré avant les écritures : les numéros de pièce doivent
-  // reprendre là où ils s'étaient arrêtés, sans réattribution.
-  'compteurs_piece',
-  'depenses',
-  'frais_creation',
-  'deplacements',
-  'justificatifs',
-  'transactions_qonto',
-  'abonnements',
-  'abonnement_echeances',
-  'commentaires',
-  'taches',
-] as const;
+/**
+ * L'ordre n'est plus écrit ici.
+ *
+ * Cette liste comptait 18 tables et nommait `depenses`, `frais_creation`
+ * et `libelles_bancaires` — vidées ou renommées. Elle ignorait `pieces`,
+ * `reglements`, `tiers`, `declarations_tva` : une restauration aurait
+ * rendu un registre vide, sans erreur ni avertissement.
+ *
+ * `ordre_restauration()` (migration 085) trie les tables réelles par
+ * dépendances de clés étrangères : une pièce n'est écrite qu'après sa
+ * catégorie et son tiers.
+ */
+
+/** Lignes écrites par lot. */
+const LOT = 200;
 
 /**
  * Tables volontairement exclues :
@@ -108,10 +101,54 @@ export async function POST(request: NextRequest) {
       tables: Record<string, { lignes: number; donnees: Record<string, unknown>[] }>;
     };
 
-    if (sauvegarde.version !== 1) {
+    if (sauvegarde.version !== 1 && sauvegarde.version !== 2) {
       return NextResponse.json(
         { erreur: `Version de sauvegarde non prise en charge : ${sauvegarde.version}` },
         { status: 400 }
+      );
+    }
+
+    // Une sauvegarde version 1 ne contient que 23 tables sur 42, et pas
+    // le registre. On la restaure si on le demande, mais on le dit.
+    const avertissements: string[] = [];
+    if (sauvegarde.version === 1) {
+      avertissements.push(
+        'Sauvegarde au format 1 : elle précède le correctif et ne contient ni '
+        + 'le registre (pieces, reglements, tiers) ni le schéma. La restauration '
+        + 'sera partielle.'
+      );
+    }
+
+    // L'ordre vient de la base cible, pas du fichier : c'est elle qui
+    // porte les clés étrangères à respecter.
+    const { data: ordreBrut, error: eOrdre } = await db.rpc('ordre_restauration');
+    if (eOrdre) {
+      return NextResponse.json(
+        { erreur: `Ordre de restauration indisponible — migration 085 appliquée ? ${eOrdre.message}` },
+        { status: 500 }
+      );
+    }
+    const ORDRE = (ordreBrut as unknown as Array<string | { ordre_restauration: string }>)
+      .map((t) => (typeof t === 'string' ? t : t.ordre_restauration));
+
+    // Tables présentes dans le fichier mais absentes de la base cible :
+    // signalées, jamais écrites en silence.
+    const inconnues = Object.keys(sauvegarde.tables)
+      .filter((t) => !ORDRE.includes(t) && !EXCLUES.has(t));
+    if (inconnues.length > 0) {
+      avertissements.push(
+        `Tables présentes dans la sauvegarde mais absentes de cette base : `
+        + `${inconnues.join(', ')}. Elles ne seront pas restaurées.`
+      );
+    }
+
+    // Tables de la base absentes du fichier : la sauvegarde est-elle
+    // bien complète ?
+    const manquantes = ORDRE
+      .filter((t) => !EXCLUES.has(t) && !(t in sauvegarde.tables));
+    if (manquantes.length > 0) {
+      avertissements.push(
+        `Tables de cette base absentes de la sauvegarde : ${manquantes.join(', ')}.`
       );
     }
 
@@ -163,8 +200,8 @@ export async function POST(request: NextRequest) {
       // dépasse les limites de la passerelle.
       let ecrit = 0;
       let erreur: string | undefined;
-      for (let i = 0; i < lignes.length; i += 200) {
-        const lot = lignes.slice(i, i + 200);
+      for (let i = 0; i < lignes.length; i += LOT) {
+        const lot = lignes.slice(i, i + LOT);
         const { error } = await db.from(table).upsert(lot, { onConflict: 'id' });
         if (error) { erreur = error.message; break; }
         ecrit += lot.length;
@@ -182,6 +219,7 @@ export async function POST(request: NextRequest) {
       base_occupee: occupees.length > 0 ? occupees : null,
       tables: rapport,
       total,
+      avertissements: avertissements.length ? avertissements : undefined,
       note: simulation
         ? "Simulation : aucune écriture. Ajoutez ?reel=1 pour appliquer."
         : "Restauration appliquée. Les justificatifs doivent être recopiés depuis R2 vers le bucket Supabase.",

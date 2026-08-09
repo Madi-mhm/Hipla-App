@@ -24,6 +24,7 @@ import Dialogue from '@/components/Dialogue';
 import Alerte from '@/components/Alerte';
 import {
   LIBELLE_TRAITEMENT, CLASSE_TRAITEMENT, LIBELLE_STATUT_QONTO,
+  LIBELLE_SYNCHRONISATION,
   type TransactionQonto, type Synchronisation, type Categorie,
 } from '@/lib/types';
 import styles from './banque.module.css';
@@ -59,6 +60,10 @@ export default function Banque({
   const [succes, setSucces] = useState<string | null>(null);
   const [vue, setVue] = useState<'a_traiter' | 'toutes'>('a_traiter');
   const [aEcarter, setAEcarter] = useState<TransactionQonto | null>(null);
+  // « Écarter » demandait un motif ; « Défaire » — qui dénoue un rapprochement
+  // comptable et supprime le règlement — partait au premier clic. Le geste
+  // destructeur était le seul non protégé.
+  const [aDefaire, setADefaire] = useState<TransactionQonto | null>(null);
   const [aCreer, setACreer] = useState<TransactionQonto | null>(null);
   const [categorieCreation, setCategorieCreation] = useState('');
   const [pieceCreation, setPieceCreation] = useState<File | null>(null);
@@ -212,14 +217,22 @@ export default function Banque({
     setEnCours(true);
     const supabase = createClient();
 
-    // `detacher_appariement` existe depuis la refonte : elle défait le
-    // lien des DEUX côtés et supprime le règlement associé. La mise à
-    // jour directe de `depenses` ne trouvait plus rien sur une écriture
-    // du registre — elle échouait en silence, et l'écriture restait
-    // marquée comme réglée.
-    if (t.depense_id) {
+    // `detacher_appariement` défait le lien des DEUX côtés et supprime le
+    // règlement associé.
+    //
+    // L'appel était conditionné à `t.depense_id` — colonne que
+    // `confirmer_appariement` ne renseigne plus depuis la bascule vers le
+    // registre. Sur tout rapprochement récent, la condition était fausse :
+    // « Défaire » remettait l'opération à traiter sans détacher l'écriture
+    // ni supprimer le règlement. La facture restait réglée, et l'opération
+    // pouvait être rapprochée une seconde fois.
+    //
+    // On passe par l'écriture résolue via `reglements`, en gardant l'ancienne
+    // colonne en repli pour les rapprochements d'avant la bascule.
+    const pieceLiee = t.ecriture?.piece_id ?? t.depense_id ?? null;
+    if (pieceLiee) {
       const { error: eDetach } = await supabase.rpc('detacher_appariement', {
-        p_piece: t.depense_id,
+        p_piece: pieceLiee,
         p_transaction: t.id,
       });
       if (eDetach) {
@@ -452,7 +465,9 @@ export default function Banque({
                       <span className="muted" style={{ display: 'block', fontSize: 'var(--fs-xs)' }}>
                         {t.libelle}
                         {t.a_justificatif && ' · pièce jointe dans Qonto'}
-                        {t.statut_qonto !== 'completed' && ` · ${LIBELLE_STATUT_QONTO[t.statut_qonto]}`}
+                        {/* Un statut inconnu de la carte affichait « undefined ». */}
+                        {t.statut_qonto !== 'completed'
+                          && ` · ${LIBELLE_STATUT_QONTO[t.statut_qonto] ?? t.statut_qonto}`}
                       </span>
                     </td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 600 }} className="amount">
@@ -461,11 +476,18 @@ export default function Banque({
                       </span>
                     </td>
                     <td style={{ ...td, textAlign: 'right' }} className="col-secondaire">
-                      {t.depenses && t.depense_id ? (
-                        <Reference id={t.depense_id} className="mono"
-                          style={{ fontSize: '.72rem', color: 'var(--navy)' }}>
-                          {t.depenses.numero_piece}
-                        </Reference>
+                      {t.ecriture ? (
+                        <>
+                          <Reference id={t.ecriture.piece_id} className="mono"
+                            style={{ fontSize: '.72rem', color: 'var(--navy)' }}>
+                            {t.ecriture.numero_piece ?? 'Ouvrir'}
+                          </Reference>
+                          {t.ecriture.nombre > 1 && (
+                            <span className="muted" style={{ display: 'block', fontSize: '.66rem' }}>
+                              +{t.ecriture.nombre - 1} autre{t.ecriture.nombre > 2 ? 's' : ''}
+                            </span>
+                          )}
+                        </>
                       ) : '—'}
                       {t.rattachement_auto && (
                         <span className="muted" style={{ display: 'block', fontSize: '.66rem' }}>
@@ -495,20 +517,18 @@ export default function Banque({
                               fabrique des écritures fausses ne doit pas être le
                               plus accessible — on conduit à l'écran complet.
                             */}
-                            <RefBanque id={t.id} className="btn btn--ghost"
-                              style={{ minHeight: 26, padding: '.1rem .55rem', fontSize: '.7rem' }}>
+                            <RefBanque id={t.id} className="btn btn--ghost btn--sm">
                               Affecter
                             </RefBanque>
-                            <button onClick={() => setAEcarter(t)} className="btn btn--ghost"
-                              style={{ minHeight: 26, padding: '.1rem .55rem', fontSize: '.7rem', color: 'var(--g-500)' }}>
+                            <button onClick={() => setAEcarter(t)}
+                              className="btn btn--ghost btn--sm" style={{ color: 'var(--g-500)' }}>
                               Écarter
                             </button>
                           </span>
                         )}
                         {(t.statut_traitement === 'rattachee' || t.statut_traitement === 'ecartee') && (
-                          <button onClick={() => defaireRattachement(t)} disabled={enCours}
-                            className="btn btn--ghost"
-                            style={{ minHeight: 26, padding: '.1rem .55rem', fontSize: '.7rem', color: 'var(--danger)' }}>
+                          <button onClick={() => setADefaire(t)} disabled={enCours}
+                            className="btn btn--ghost btn--sm btn--danger">
                             Défaire
                           </button>
                         )}
@@ -551,11 +571,18 @@ export default function Banque({
                         s.statut === 'reussie' ? 'badge--success'
                         : s.statut === 'echouee' ? 'badge--danger' : 'badge--warning'
                       }`}>
-                        {s.statut}
+                        {LIBELLE_SYNCHRONISATION[s.statut] ?? s.statut}
                       </span>
+                      {/* Le message était coupé à 60 caractères : quand une
+                          synchronisation échoue, 60 caractères disent rarement
+                          pourquoi. On le donne en entier, en petit. */}
                       {s.erreur && (
-                        <span className="muted" style={{ display: 'block', fontSize: '.66rem', marginTop: '.2rem' }}>
-                          {s.erreur.slice(0, 60)}
+                        <span className="muted" style={{
+                          display: 'block', fontSize: 'var(--fs-xs)', marginTop: '.25rem',
+                          maxWidth: '32ch', whiteSpace: 'normal', textAlign: 'left',
+                          marginLeft: 'auto', lineHeight: 1.4,
+                        }}>
+                          {s.erreur}
                         </span>
                       )}
                     </td>
@@ -586,6 +613,25 @@ export default function Banque({
           if (t) ecarter(t, motif);
         }}
         onAnnuler={() => setAEcarter(null)}
+      />
+
+      <Dialogue
+        ouvert={aDefaire !== null}
+        titre="Défaire ce rapprochement"
+        description={
+          `${aDefaire?.libelle ?? ''} — ${money(Number(aDefaire?.montant ?? 0))}. ` +
+          "Le lien avec l'écriture est dénoué et le règlement supprimé : " +
+          "la facture redevient due, et la TVA sur encaissement repart à " +
+          "l'exigibilité. L'opération revient dans « à traiter »."
+        }
+        libelleValider="Défaire"
+        danger
+        onValider={() => {
+          const t = aDefaire;
+          setADefaire(null);
+          if (t) defaireRattachement(t);
+        }}
+        onAnnuler={() => setADefaire(null)}
       />
 
       {aCreer && (

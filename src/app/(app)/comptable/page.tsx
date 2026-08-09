@@ -3,7 +3,7 @@ import Header from '@/components/Header';
 import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
-import EspaceComptable from './EspaceComptable';
+import EspaceComptable, { type EcheanceDeclarative } from './EspaceComptable';
 import type { Anomalie, Commentaire, Tache } from '@/lib/types';
 
 export const metadata = { title: 'Espace comptable — Hipla Gestion' };
@@ -18,7 +18,7 @@ export default async function Page() {
 
   const [
     { data: exercices }, { data: anomalies }, { data: dossier },
-    { data: commentaires }, { data: taches },
+    { data: commentaires }, { data: taches }, { data: echeances },
   ] = await Promise.all([
     supabase.from('exercices').select('*').order('date_debut'),
     supabase.from('v_anomalies').select('*').order('date_piece', { ascending: false }),
@@ -34,6 +34,16 @@ export default async function Page() {
       .select('*, assigne:profils!taches_assignee_a_fkey(nom_complet), auteur:profils!taches_cree_par_fkey(nom_complet)')
       .neq('statut', 'annulee')
       .order('echeance', { ascending: true, nullsFirst: false }),
+    // Les échéances déclaratives venaient d'un tableau écrit en dur dans
+    // `lib/echeances.ts`, qui en comptait quatre. La table `obligations`
+    // en porte six, dont les deux plus proches — plateforme agréée au
+    // 1er septembre 2026, ratification des frais de création au 30 —
+    // absentes du tableau. L'écran fait pour surveiller les échéances
+    // était le seul à ne pas les voir.
+    supabase.from('v_echeances')
+      .select('id, echeance, libelle, detail, nature, accomplie')
+      .eq('source', 'obligation')
+      .order('echeance'),
   ]);
 
   const aujourdhui = new Date().toISOString().slice(0, 10);
@@ -63,6 +73,7 @@ export default async function Page() {
           anomalies={(anomalies ?? []) as Anomalie[]}
           commentaires={(commentaires ?? []) as Commentaire[]}
           taches={(taches ?? []) as Tache[]}
+          echeances={(echeances ?? []) as EcheanceDeclarative[]}
           utilisateurId={profil.id}
         />
       </div>

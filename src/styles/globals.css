@@ -110,6 +110,18 @@ textarea {
   color: inherit;
 }
 
+/* iOS Safari agrandit la page dès qu'un champ fait moins de 16 px, et l'on
+   doit ensuite pincer pour revenir. Sur un formulaire de dix champs, c'est
+   dix zooms. La base de l'application est à 0,95 rem — soit 15,2 px : on
+   remonte les seuls champs de saisie, sur les largeurs tactiles. */
+@media (max-width: 900px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 :focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
@@ -298,6 +310,21 @@ table { width: 100%; border-collapse: collapse; }
 .btn--gold { background: var(--gold); color: var(--navy-deep); }
 .btn--gold:hover { background: var(--gold-soft); }
 .btn--ghost { border-color: var(--g-300); color: var(--g-700); }
+
+/* Bouton de ligne de tableau.
+   Les actions en fin de ligne étaient posées à 26 px de haut par style en
+   ligne, contredisant les 42 px déclarés plus haut : sur un téléphone,
+   « Écarter » se touchait à la place d'« Affecter ». 34 px reste dense sans
+   devenir un piège. Toute action de tableau passe par cette classe — plus
+   aucune hauteur en dur. */
+.btn--sm {
+  min-height: 34px;
+  padding: 0.25rem 0.7rem;
+  font-size: var(--fs-xs);
+  gap: 0.3rem;
+}
+.btn--danger { color: var(--danger); border-color: var(--g-300); }
+.btn--danger:hover { background: var(--danger-fond, var(--g-100)); }
 .btn--ghost:hover { background: var(--g-100); }
 
 /* Montants : convention comptable, négatif en rouge entre parenthèses */

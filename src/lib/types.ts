@@ -346,7 +346,16 @@ export type TransactionQonto = {
   rattachement_auto: boolean;
   rattache_le: string | null;
   synchronise_le: string;
-  depenses?: { numero_piece: string | null; fournisseur: string };
+  /** Écriture rattachée, résolue via `reglements` par la page.
+      `depenses` — l'ancienne jointure — ne renvoyait plus rien depuis la
+      bascule vers le registre. `nombre` vaut plus de 1 lorsque l'opération
+      solde plusieurs règlements. */
+  ecriture?: {
+    piece_id: string;
+    numero_piece: string | null;
+    tiers: string | null;
+    nombre: number;
+  } | null;
 };
 
 export type Synchronisation = {
@@ -380,6 +389,14 @@ export const LIBELLE_STATUT_QONTO: Record<string, string> = {
   pending: 'En attente',
   declined: 'Refusée',
   reversed: 'Annulée',
+};
+
+/** Statuts de synchronisation. Ils s'affichaient bruts — « reussie »,
+    « echouee » — seuls dans l'application à ne pas passer par un libellé. */
+export const LIBELLE_SYNCHRONISATION: Record<string, string> = {
+  reussie: 'Réussie',
+  echouee: 'Échouée',
+  en_cours: 'En cours',
 };
 
 export const LIBELLE_RAPPROCHEMENT: Record<string, string> = {

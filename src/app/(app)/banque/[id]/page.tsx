@@ -3,7 +3,7 @@ import Header from '@/components/Header';
 import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
-import DetailTransaction, {
+import DetailTransaction, { type Associe,
   type CandidatPiece, type Ecriture, type EcritureOuverte, type SoldeAssocie,
 } from './DetailTransaction';
 import type { Categorie } from '@/lib/types';
@@ -76,6 +76,14 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   // confondre compterait la charge deux fois.
   const { data: soldes } = await supabase.rpc('solde_compte_courant');
 
+  // La liste complète des associés, et non seulement ceux qui ont déjà
+  // un solde : un apport peut venir d'un associé sans mouvement passé,
+  // qui n'apparaîtrait donc pas dans `solde_compte_courant()`.
+  const { data: associes } = await supabase
+    .from('associes')
+    .select('identifiant, prenom, nom')
+    .order('nom');
+
   // Une règle déclarée ou un alias appris peut pré-remplir la saisie.
   const { data: regle } = await supabase.rpc('regle_pour_transaction', {
     p_transaction: id,
@@ -106,6 +114,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           ecriture={ecriture}
           regle={regle as Record<string, unknown> | null}
           soldes={(soldes ?? []) as SoldeAssocie[]}
+          associes={(associes ?? []) as Associe[]}
           peutGerer={peut(profil.role, 'banque', 'update')}
         />
       </div>

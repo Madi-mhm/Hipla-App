@@ -22,10 +22,24 @@ export default async function Page() {
   // Les relances font l'objet d'un second appel : elles n'existaient pas
   // au moment où `seance_hebdomadaire` a été écrite, et l'élargir
   // obligerait à retoucher une fonction que six écrans lisent.
-  const [{ data, error }, { data: relances }] = await Promise.all([
-    supabase.rpc('seance_hebdomadaire'),
-    supabase.rpc('a_relancer'),
-  ]);
+  //
+  // Le compte courant fait l'objet d'un troisième appel. `seance_hebdomadaire`
+  // le recalcule à sa façon — `sum(montant_ttc) where moyen_paiement =
+  // 'avance_associe'` — et manque les remboursements, écrits avec le moyen
+  // « virement ». Une fois remboursé, l'écran continuait donc d'annoncer une
+  // dette éteinte, indéfiniment, pendant que /associes affichait le bon solde.
+  //
+  // On lit la source, `solde_compte_courant()`, plutôt que de réécrire une
+  // fonction que six écrans partagent.
+  const [{ data, error }, { data: relances }, { data: comptesCourants }] =
+    await Promise.all([
+      supabase.rpc('seance_hebdomadaire'),
+      supabase.rpc('a_relancer'),
+      supabase.rpc('solde_compte_courant'),
+    ]);
+
+  const compteCourant = ((comptesCourants ?? []) as Array<{ solde: number | string }>)
+    .reduce((t, s) => t + Number(s.solde), 0);
 
   if (error || !data) {
     return (
@@ -54,7 +68,7 @@ export default async function Page() {
         sousTitre="Tout ce qui attend une décision, en un seul endroit"
       />
       <div className="content">
-        <SeanceHebdo seance={seance} />
+        <SeanceHebdo seance={seance} compteCourant={compteCourant} />
         <Relances
           lignes={(relances ?? []) as Relance[]}
           peutRelancer={peut(profil.role, 'ventes', 'update')}
