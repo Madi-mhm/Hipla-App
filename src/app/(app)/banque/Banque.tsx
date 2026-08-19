@@ -12,7 +12,7 @@
  * Aucun autre contrôle ne le prouve.
  */
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import Reference from '@/components/Reference';
 import RefBanque from '@/components/apercu/RefBanque';
@@ -48,11 +48,15 @@ type Props = {
   utilisateurId: string;
   peutGerer: boolean;
   justificatifsEnAttente: number;
+  /** Calculé côté base sur toute la table (migration 101) — jamais sur
+      les seules `transactions` chargées ici, qui sont plafonnées à 300
+      lignes pour l'affichage. */
+  soldeReconstitue: { solde: number; nb_operations: number } | null;
 };
 
 export default function Banque({
   transactions, synchronisations, controle, categories, utilisateurId, peutGerer,
-  justificatifsEnAttente,
+  justificatifsEnAttente, soldeReconstitue,
 }: Props) {
   const router = useRouter();
   const [enCours, setEnCours] = useState(false);
@@ -80,11 +84,13 @@ export default function Banque({
 
   const visibles = vue === 'a_traiter' ? aTraiter : transactions;
 
-  const soldeReconstitue = useMemo(() => {
-    return transactions
-      .filter((t) => t.statut_qonto === 'completed')
-      .reduce((s, t) => s + (t.sens === 'credit' ? Number(t.montant) : -Number(t.montant)), 0);
-  }, [transactions]);
+  // Ne plus recalculer ici : la liste `transactions` est plafonnée à 300
+  // lignes pour l'affichage (voir banque/page.tsx), donc toute somme
+  // faite dessus dérive silencieusement au-delà. `soldeReconstitue` vient
+  // maintenant de `solde_reconstitue()`, calculée côté base sur toute la
+  // table (migration 101).
+  const solde = soldeReconstitue?.solde ?? 0;
+  const nbOperationsSolde = soldeReconstitue?.nb_operations ?? 0;
 
   async function synchroniser() {
     setEnCours(true);
@@ -276,19 +282,19 @@ export default function Banque({
         <div className="card">
           <p className="card__title">Solde reconstitué</p>
           <p className="amount" style={{ fontSize: '1.4rem', fontFamily: 'var(--display)', fontWeight: 600 }}>
-            {money(soldeReconstitue)}
+            {money(solde)}
           </p>
           <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.3rem' }}>
-            Depuis {transactions.length} opérations
+            Depuis {nbOperationsSolde} opérations
           </p>
-          {soldeBanque !== null && Math.abs(soldeBanque - soldeReconstitue) >= 0.01 && (
+          {soldeBanque !== null && Math.abs(soldeBanque - solde) >= 0.01 && (
             <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--danger)', marginTop: '.4rem', lineHeight: 1.45 }}>
               Solde bancaire réel : {money(soldeBanque)} — écart de{' '}
-              {money(Math.abs(soldeBanque - soldeReconstitue))}. Des opérations
+              {money(Math.abs(soldeBanque - solde))}. Des opérations
               manquent.
             </p>
           )}
-          {soldeBanque !== null && Math.abs(soldeBanque - soldeReconstitue) < 0.01 && (
+          {soldeBanque !== null && Math.abs(soldeBanque - solde) < 0.01 && (
             <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--success)', marginTop: '.4rem' }}>
               Conforme au solde bancaire.
             </p>

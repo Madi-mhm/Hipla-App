@@ -14,7 +14,7 @@
  * photographie un ticket en sortant du magasin, on vérifie le soir.
  */
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { compresser, poids } from '@/lib/compression';
@@ -67,6 +67,11 @@ type Document = {
   tauxTva?: number;
   numeroFacture?: string;
   description?: string;
+  // Sans ces deux-là, une facture extraite avancée personnellement
+  // (comme les deux autres écrans) tombait sur « société » par défaut
+  // et disparaissait silencieusement du compte courant de l'associé.
+  payePar?: string;
+  moyenPaiement?: string;
 };
 
 type Usage = {
@@ -89,7 +94,15 @@ export default function Extraction({
   const [erreur, setErreur] = useState<string | null>(null);
   const [succes, setSucces] = useState<string | null>(null);
   const [coutSession, setCoutSession] = useState(0);
+  const [payeurs, setPayeurs] = useState<
+    Array<{ valeur: string; libelle: string; avance: boolean }>>([]);
   const champPhoto = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    createClient().rpc('payeurs_possibles').then(({ data }) => {
+      if (data) setPayeurs(data as typeof payeurs);
+    });
+  }, []);
   const champFichier = useRef<HTMLInputElement>(null);
 
   const reste = usage?.reste ?? 100;
@@ -205,6 +218,15 @@ export default function Extraction({
     const tvaRec = tvaRecuperable(m.tva, cat.taux_deductibilite);
     const statut = valider && peutValider ? 'validee' : 'en_attente';
 
+    // Même règle que sur les écrans de création et de modification :
+    // « avance_associe » est ce que lit le compte courant, pas
+    // seulement `paye_par`. Un payeur associé force ce moyen de
+    // paiement, quoi qu'ait extrait l'IA depuis la facture.
+    const estAvance = payeurs.find((x) => x.valeur === (doc.payePar ?? 'societe'))?.avance;
+    const moyenPaiement = estAvance
+      ? 'avance_associe'
+      : (doc.moyenPaiement ?? doc.extrait?.mode_paiement ?? 'carte');
+
     const { data: res, error } = await supabase.rpc('creer_depense', {
       p_date: doc.dateDepense,
       p_fournisseur: (doc.fournisseur ?? '').trim(),
@@ -216,7 +238,8 @@ export default function Extraction({
       p_statut: statut,
       p_origine: 'extraction_ia',
       p_numero_facture: doc.numeroFacture || null,
-      p_moyen_paiement: doc.extrait?.mode_paiement ?? 'carte',
+      p_moyen_paiement: moyenPaiement,
+      p_paye_par: doc.payePar ?? 'societe',
       p_notes: doc.extrait?.remarques ?? null,
       p_extrait_ia: true,
       p_confiance: doc.extrait?.confiance ?? null,
@@ -492,6 +515,22 @@ export default function Extraction({
                               <option key={c.id} value={c.id} disabled={c.bloque}>{c.libelle}</option>
                             ))}
                           </optgroup>
+                        ))}
+                      </select></label>
+                    <label><span>Payé par</span>
+                      <select value={doc.payePar ?? 'societe'}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          const estAvance = payeurs.find((x) => x.valeur === v)?.avance;
+                          majDoc(doc.id, {
+                            payePar: v,
+                            moyenPaiement: estAvance ? 'avance_associe' : (doc.moyenPaiement ?? 'carte'),
+                          });
+                        }}>
+                        {payeurs.length === 0 ? (
+                          <option value="societe">La société</option>
+                        ) : payeurs.map((x) => (
+                          <option key={x.valeur} value={x.valeur}>{x.libelle}</option>
                         ))}
                       </select></label>
                   </div>

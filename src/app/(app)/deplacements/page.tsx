@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import Reference from '@/components/Reference';
 import { redirect } from 'next/navigation';
 import Header from '@/components/Header';
 import { createClient } from '@/lib/supabase/server';
@@ -22,29 +21,37 @@ export default async function Page() {
   const supabase = await createClient();
   const annee = new Date().getFullYear();
 
-  const [{ data: dep }, { data: veh }, { data: bar }, { data: etatKm }] = await Promise.all([
-    supabase.from('deplacements')
-      .select('*, vehicules(libelle, immatriculation, cv_fiscaux, motorisation), profils!deplacements_cree_par_fkey(nom_complet)')
-      .order('date_trajet', { ascending: false }).limit(200),
-    supabase.from('vehicules').select('*').eq('actif', true),
-    supabase.from('bareme_km').select('*').eq('annee', annee),
-    // Ce qui attend d'être constaté : le calcul appartient à la base,
-    // qui seule connaît le cumul annuel et les périodes déjà closes.
-    supabase.rpc('km_a_constater'),
-  ]);
+  const [{ data: dep }, { data: veh }, { data: bar }, { data: etatKm }, { data: cumuls }] =
+    await Promise.all([
+      supabase.from('deplacements')
+        .select('*, vehicules(libelle, immatriculation, cv_fiscaux, motorisation, proprietaire_nom), profils!deplacements_cree_par_fkey(nom_complet)')
+        .order('date_trajet', { ascending: false }).limit(200),
+      supabase.from('vehicules').select('*').eq('actif', true),
+      supabase.from('bareme_km').select('*').eq('annee', annee),
+      // Ce qui attend d'être constaté : le calcul appartient à la base,
+      // qui seule connaît le cumul annuel et les périodes déjà closes.
+      supabase.rpc('km_a_constater'),
+      // Cumul annuel par véhicule, calculé côté base sur TOUTE la table
+      // (migration 102) — la liste `dep` ci-dessus est plafonnée à 200
+      // lignes pour l'affichage du journal, et le barème étant
+      // progressif, un cumul tronqué change le coefficient de chaque
+      // kilomètre, pas seulement ceux au-delà de la 200e ligne.
+      supabase.rpc('cumul_km_annuel', { p_annee: annee }),
+    ]);
 
   const deplacements = (dep ?? []) as Deplacement[];
   const vehicules = (veh ?? []) as Vehicule[];
   const bareme = (bar ?? []) as LigneBareme[];
   const attente = deplacements.filter((d) => d.statut === 'en_attente');
+  const cumulsParVehicule = new Map<string, number>(
+    ((cumuls ?? []) as Array<{ vehicule_id: string; km: number }>)
+      .map((c) => [c.vehicule_id, Number(c.km)])
+  );
 
   // Cumul annuel par véhicule : le coefficient du barème dépend du total
   // parcouru sur l'année, pas de chaque trajet pris isolément.
   const parVehicule = vehicules.map((v) => {
-    const km = deplacements
-      .filter((d) => d.vehicule_id === v.id && d.statut === 'validee'
-        && new Date(d.date_trajet).getFullYear() === annee)
-      .reduce((s, d) => s + Number(d.kilometres) * (d.aller_retour ? 2 : 1), 0);
+    const km = cumulsParVehicule.get(v.id) ?? 0;
     return {
       vehicule: v,
       km,
@@ -143,6 +150,7 @@ function Tableau({ lignes, peutValider }: { lignes: Deplacement[]; peutValider: 
             <th style={th}>Pièce</th>
             <th style={th}>Date</th>
             <th style={th}>Trajet</th>
+            <th style={th} className="col-secondaire">Véhicule</th>
             <th style={th} className="col-secondaire">Motif</th>
             <th style={{ ...th, textAlign: 'right' }}>Km</th>
             <th style={{ ...th, textAlign: 'right' }}>Statut</th>
@@ -157,15 +165,29 @@ function Tableau({ lignes, peutValider }: { lignes: Deplacement[]; peutValider: 
             opacity: d.statut === 'annulee' ? 0.45 : 1,
           }}>
               <td style={td} className="mono">
-                <Reference id={d.id}
-                  style={{ fontSize: '.72rem', color: 'var(--navy)' }}>
-                    {d.numero_piece ?? '—'}
-                  </Reference>
+                {/* `d.numero_piece` (préfixe KM-) numérote le trajet, pas une
+                    pièce comptable : `Reference` cherchait `d.id` dans
+                    `pieces`, où il n'existe jamais — un trajet est un
+                    justificatif, l'écriture d'indemnité regroupe plusieurs
+                    trajets à la fois (`constater_indemnites_km`). Il n'y a
+                    pas encore de colonne reliant un trajet à la pièce qui
+                    l'a couvert : voir /areas/hipla-app pour l'améliorer. */}
+                <span style={{ fontSize: '.72rem', color: 'var(--g-500)' }}>
+                  {d.numero_piece ?? '—'}
+                </span>
               </td>
               <td style={td}>{date(d.date_trajet)}</td>
               <td style={{ ...td, fontWeight: 500 }}>
                 {d.depart} → {d.arrivee}
                 {d.aller_retour && <span className="badge badge--neutral" style={{ marginLeft: '.4rem' }}>A/R</span>}
+              </td>
+              <td style={td} className="col-secondaire">
+                {d.vehicules?.libelle ?? '—'}
+                {d.vehicules?.proprietaire_nom && (
+                  <span className="muted" style={{ display: 'block', fontSize: 'var(--fs-xs)' }}>
+                    {d.vehicules.proprietaire_nom}
+                  </span>
+                )}
               </td>
               <td style={td} className="col-secondaire">{d.motif}</td>
               <td style={{ ...td, textAlign: 'right' }} className="amount">

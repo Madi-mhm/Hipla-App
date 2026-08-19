@@ -50,7 +50,14 @@ type Ligne = {
   justificatif_requis: boolean;
 };
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ annulees?: string }>;
+}) {
+  const { annulees } = await searchParams;
+  const voirAnnulees = annulees === '1';
+
   const profil = await profilCourant();
   if (!profil) redirect('/connexion');
   if (!peut(profil.role, 'depenses', 'read')) redirect('/');
@@ -95,6 +102,15 @@ export default async function Page() {
 
   const attente = depenses.filter((d) => d.statut === 'en_attente');
   const validees = depenses.filter((d) => d.statut === 'validee');
+
+  // Les annulées restent en base pour la piste d'audit (la numérotation
+  // ne se réutilise jamais), mais n'ont plus d'action possible : les
+  // masquer par défaut évite qu'elles noient la liste au fil des
+  // corrections, sans rien supprimer.
+  const nbAnnulees = depenses.filter((d) => d.statut === 'annulee').length;
+  const depensesAffichees = voirAnnulees
+    ? depenses
+    : depenses.filter((d) => d.statut !== 'annulee');
 
 
   // Ce qui manque, sur les seules écritures entrées en comptabilité :
@@ -216,8 +232,21 @@ export default async function Page() {
         )}
 
         <div className="card">
-          <p className="card__title">Toutes les dépenses</p>
-          {depenses.length === 0 ? (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '.5rem' }}>
+            <p className="card__title">Toutes les dépenses</p>
+            {nbAnnulees > 0 && (
+              <Link
+                href={voirAnnulees ? '/depenses' : '/depenses?annulees=1'}
+                className="muted"
+                style={{ fontSize: 'var(--fs-xs)' }}
+              >
+                {voirAnnulees
+                  ? 'Masquer les annulées'
+                  : `Afficher les annulées (${nbAnnulees})`}
+              </Link>
+            )}
+          </div>
+          {depensesAffichees.length === 0 ? (
             <div className="etat-vide">
               <p>Aucune dépense enregistrée.</p>
               <p className="muted">
@@ -232,7 +261,7 @@ export default async function Page() {
               )}
             </div>
           ) : (
-            <Tableau depenses={depenses} peutValider={false} />
+            <Tableau depenses={depensesAffichees} peutValider={false} />
           )}
         </div>
       </div>

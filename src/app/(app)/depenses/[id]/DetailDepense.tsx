@@ -8,7 +8,7 @@
  * acceptable en comptabilité, pas l'interdiction de corriger.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { compresser, poids } from '@/lib/compression';
@@ -62,8 +62,19 @@ export default function DetailDepense({
   const [saisieEn, setSaisieEn] = useState<'ht' | 'ttc'>('ttc');
   const [montant, setMontant] = useState(String(depense.montant_ttc).replace('.', ','));
   const [tauxTva, setTauxTva] = useState(Number(depense.taux_tva));
+  const [moyenPaiement, setMoyenPaiement] = useState(depense.moyen_paiement ?? 'carte');
+  const [payePar, setPayePar] = useState(depense.paye_par ?? 'societe');
+  const [payeurs, setPayeurs] = useState<
+    Array<{ valeur: string; libelle: string; avance: boolean }>>([]);
   const [notes, setNotes] = useState(depense.notes ?? '');
   const [nouveauxFichiers, setNouveauxFichiers] = useState<File[]>([]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.rpc('payeurs_possibles').then(({ data }) => {
+      if (data) setPayeurs(data as typeof payeurs);
+    });
+  }, []);
 
   const categorie = categories.find((c) => c.id === categorieId) ?? null;
 
@@ -98,6 +109,8 @@ export default function DetailDepense({
       p_montant_ttc: montants.ttc,
       p_taux_tva: tauxTva,
       p_objet: libelle.trim() || null,
+      p_moyen_paiement: moyenPaiement,
+      p_paye_par: payePar,
       p_notes: notes.trim() || null,
     });
 
@@ -130,6 +143,8 @@ export default function DetailDepense({
       montant_tva: Number(depense.montant_tva),
       montant_ttc: Number(depense.montant_ttc),
       tva_deductible: Number(depense.tva_deductible),
+      moyen_paiement: depense.moyen_paiement,
+      paye_par: depense.paye_par,
       notes: depense.notes,
     };
     const apres = {
@@ -143,6 +158,8 @@ export default function DetailDepense({
       montant_tva: montants.tva,
       montant_ttc: montants.ttc,
       tva_deductible: tvaRec,
+      moyen_paiement: moyenPaiement,
+      paye_par: payePar,
       notes: notes.trim() || null,
     };
 
@@ -435,6 +452,57 @@ export default function DetailDepense({
                 )}
               </div>
             )}
+
+            <div className={styles.grille}>
+              <label className={styles.champ}>
+                <span>Moyen de paiement</span>
+                {/* Même règle que sur l'écran de création : ce champ EST
+                    ce que lit le compte courant, pas juste une note sur
+                    l'instrument utilisé. Un « Payé par » sur un associé
+                    et un « Carte » ici ensemble faisaient disparaître la
+                    dette silencieusement. */}
+                <select
+                  value={moyenPaiement}
+                  onChange={(e) => setMoyenPaiement(e.target.value)}
+                  disabled={payeurs.find((x) => x.valeur === payePar)?.avance}
+                >
+                  {payeurs.find((x) => x.valeur === payePar)?.avance ? (
+                    <option value="avance_associe">Avance de l&apos;associé</option>
+                  ) : (
+                    <>
+                      <option value="carte">Carte</option>
+                      <option value="virement">Virement</option>
+                      <option value="prelevement">Prélèvement</option>
+                      <option value="especes">Espèces</option>
+                      <option value="autre">Autre</option>
+                    </>
+                  )}
+                </select>
+              </label>
+
+              <label className={styles.champ}>
+                <span>Payé par</span>
+                <select
+                  value={payePar}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setPayePar(v);
+                    const estAvance = payeurs.find((x) => x.valeur === v)?.avance;
+                    if (estAvance) {
+                      setMoyenPaiement('avance_associe');
+                    } else if (moyenPaiement === 'avance_associe') {
+                      setMoyenPaiement('carte');
+                    }
+                  }}
+                >
+                  {payeurs.length === 0 ? (
+                    <option value="societe">La société</option>
+                  ) : payeurs.map((x) => (
+                    <option key={x.valeur} value={x.valeur}>{x.libelle}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
             <label className={styles.champ} style={{ marginTop: '1rem' }}>
               <span>Notes</span>

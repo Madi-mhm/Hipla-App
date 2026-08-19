@@ -103,6 +103,12 @@ export default function FormulaireDeplacement({
     if (!e || etapes.includes(e)) return;
     setEtapes([...etapes, e]);
     setNouvelleEtape('');
+    // Une tournée porte déjà l'aller ET le retour dans le kilométrage
+    // relevé au compteur — le texte d'aide le dit explicitement. La case
+    // se désactive pour l'utilisateur, mais rien ne forçait sa VALEUR à
+    // suivre : elle restait bloquée sur son défaut (coché), doublant
+    // silencieusement le kilométrage sans qu'on puisse la décocher.
+    setAllerRetour(false);
   }
 
   // Une tournée : plusieurs arrêts, un seul trajet comptable. La

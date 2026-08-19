@@ -16,7 +16,7 @@ export default async function Page() {
 
   const supabase = await createClient();
 
-  const [{ data: tx }, { data: synchros }, { data: controle }, { data: cats }] =
+  const [{ data: tx }, { data: synchros }, { data: controle }, { data: cats }, { data: soldeRecon }] =
     await Promise.all([
       // L'écriture liée passait par `depenses`, table que le registre a
       // remplacée : `confirmer_appariement` ne renseigne plus `depense_id`.
@@ -31,6 +31,10 @@ export default async function Page() {
         .select('*').order('demarree_le', { ascending: false }).limit(10),
       supabase.rpc('solde_controle'),
       supabase.from('categories').select('*').eq('actif', true).order('ordre'),
+      // Calculé côté base sur TOUTE la table : la liste ci-dessus est
+      // plafonnée à 300 lignes pour l'affichage, le solde ne doit pas
+      // hériter de ce plafond. Voir migration 101.
+      supabase.rpc('solde_reconstitue'),
     ]);
 
   const { count: justificatifsEnAttente } = await supabase
@@ -82,6 +86,7 @@ export default async function Page() {
           utilisateurId={profil.id}
           peutGerer={peut(profil.role, 'banque', 'update')}
           justificatifsEnAttente={justificatifsEnAttente ?? 0}
+          soldeReconstitue={soldeRecon as { solde: number; nb_operations: number } | null}
         />
       </div>
     </>

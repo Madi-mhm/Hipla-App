@@ -7,7 +7,7 @@
  * L'interface ne fait que ne pas proposer ce qui sera de toute façon refusé.
  */
 
-export type Role = 'proprietaire' | 'contributeur' | 'comptable' | 'salarie';
+export type Role = 'proprietaire' | 'contributeur' | 'comptable' | 'salarie' | 'lecture_seule';
 
 export type Module =
   | 'entreprise' | 'utilisateurs' | 'depenses' | 'ventes' | 'abonnements'
@@ -75,6 +75,27 @@ const DROITS: Record<Role, Partial<Record<Module, Action[]>>> = {
     taches: ['read', 'create', 'update'],
   },
   salarie: {},
+  // Aucune écriture, nulle part — pas même "revue", "export" ou
+  // "commentaires create" que porte `comptable`. Uniquement `read`,
+  // sur tous les modules dont le rôle a besoin pour voir l'ensemble
+  // de l'activité, exactement comme demandé : lire, jamais agir.
+  lecture_seule: {
+    entreprise: ['read'],
+    utilisateurs: ['read'],
+    depenses: ['read'],
+    ventes: ['read'],
+    clients: ['read'],
+    prestations: ['read'],
+    abonnements: ['read'],
+    banque: ['read'],
+    tva: ['read'],
+    echeances: ['read'],
+    documents: ['read'],
+    exports: ['read'],
+    audit_comptable: ['read'],
+    commentaires: ['read'],
+    taches: ['read'],
+  },
 };
 
 export function peut(role: Role | null | undefined, module: Module, action: Action): boolean {
@@ -87,6 +108,7 @@ export const LIBELLE_ROLE: Record<Role, string> = {
   contributeur: 'Contributeur',
   comptable: 'Comptable',
   salarie: 'Salarié',
+  lecture_seule: 'Lecture seule',
 };
 
 export const DESCRIPTION_ROLE: Record<Role, string> = {
@@ -98,4 +120,6 @@ export const DESCRIPTION_ROLE: Record<Role, string> = {
     "Consulte l'ensemble des données, extrait les exports comptables, signale les anomalies et marque les écritures revues. Ne modifie ni ne valide aucune écriture.",
   salarie:
     "Accède uniquement à son espace personnel : contrat, bulletins, planning.",
+  lecture_seule:
+    "Consulte l'ensemble des données, ne peut rien créer, modifier, valider, exporter ni commenter.",
 };

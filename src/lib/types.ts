@@ -270,6 +270,11 @@ export type Echeance = {
   montant_prevu: number;
   montant_reel: number | null;
   statut: 'attendue' | 'payee' | 'justificatif_manquant' | 'ecart' | 'annulee';
+  /** Colonne réelle depuis la migration 046. `depense_id` est conservée
+      dans la base le temps de la transition, mais n'est plus écrite :
+      c'est `piece_id` qui pointe vers l'écriture réelle du registre. */
+  piece_id: string | null;
+  /** @deprecated conservée dans la base, plus jamais écrite depuis la 046. */
   depense_id: string | null;
   transaction_qonto_id: string | null;
   abonnements?: { nom: string; fournisseur: string };

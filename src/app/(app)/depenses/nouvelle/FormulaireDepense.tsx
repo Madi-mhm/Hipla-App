@@ -319,18 +319,59 @@ export default function FormulaireDepense({ categories, peutValider }: Props) {
         <div className={styles.grille} style={{ marginTop: '1rem' }}>
           <label className={styles.champ}>
             <span>Moyen de paiement</span>
-            <select value={moyenPaiement} onChange={(e) => setMoyenPaiement(e.target.value)}>
-              <option value="carte">Carte</option>
-              <option value="virement">Virement</option>
-              <option value="prelevement">Prélèvement</option>
-              <option value="especes">Espèces</option>
-              <option value="autre">Autre</option>
+            {/* Quand un associé avance l'argent, le moyen de paiement
+                comptable EST « avance_associe » — c'est ce champ, et lui
+                seul, que lit le compte courant (v_compte_courant). Le
+                laisser sur « Carte » parce que c'est physiquement la
+                carte de l'associé faisait disparaître la dette sans
+                aucune erreur visible : rien ne bloquait, le montant
+                partait simplement dans le vide. On ne laisse donc plus
+                les deux champs se contredire. */}
+            <select
+              value={moyenPaiement}
+              onChange={(e) => setMoyenPaiement(e.target.value)}
+              disabled={payeurs.find((x) => x.valeur === payePar)?.avance}
+            >
+              {payeurs.find((x) => x.valeur === payePar)?.avance ? (
+                <option value="avance_associe">Avance de l&apos;associé</option>
+              ) : (
+                <>
+                  <option value="carte">Carte</option>
+                  <option value="virement">Virement</option>
+                  <option value="prelevement">Prélèvement</option>
+                  <option value="especes">Espèces</option>
+                  <option value="autre">Autre</option>
+                </>
+              )}
             </select>
+            {payeurs.find((x) => x.valeur === payePar)?.avance && (
+              <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.3rem' }}>
+                L&apos;instrument réel (carte perso, espèces...) peut être précisé
+                dans les notes ci-dessous — ce qui compte ici, c&apos;est que la
+                société doit cette somme à l&apos;associé.
+              </p>
+            )}
           </label>
 
           <label className={styles.champ}>
             <span>Payé par</span>
-            <select value={payePar} onChange={(e) => setPayePar(e.target.value)}>
+            <select
+              value={payePar}
+              onChange={(e) => {
+                const v = e.target.value;
+                setPayePar(v);
+                const estAvance = payeurs.find((x) => x.valeur === v)?.avance;
+                if (estAvance) {
+                  setMoyenPaiement('avance_associe');
+                } else if (moyenPaiement === 'avance_associe') {
+                  // On revient à « La société » après avoir choisi un
+                  // associé : le champ figé n'a plus de sens, on rend
+                  // la main sur un choix normal plutôt que de laisser
+                  // une valeur qu'on ne peut plus modifier.
+                  setMoyenPaiement('carte');
+                }
+              }}
+            >
               {payeurs.length === 0 ? (
                 <option value="societe">La société</option>
               ) : payeurs.map((x) => (

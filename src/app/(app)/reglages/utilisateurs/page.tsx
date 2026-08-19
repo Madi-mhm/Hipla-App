@@ -16,7 +16,7 @@ export default async function Page() {
   const { data: profils } = await supabase
     .from('profils').select('*').order('cree_le');
 
-  const roles: Role[] = ['proprietaire', 'contributeur', 'comptable'];
+  const roles: Role[] = ['proprietaire', 'contributeur', 'comptable', 'lecture_seule'];
 
   return (
     <>

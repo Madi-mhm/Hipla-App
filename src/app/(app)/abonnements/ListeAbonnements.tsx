@@ -588,10 +588,14 @@ function Bloc({
                   opacity: a.statut === 'resilie' ? 0.5 : 1,
                 }}>
                   <td style={td} className="mono">
-                    <Reference id={a.id}
-                      style={{ fontSize: '.72rem', color: 'var(--navy)' }}>
-                        {a.numero_piece ?? '—'}
-                      </Reference>
+                    {/* `a.numero_piece` (préfixe ABO-) est le repère de
+                        l'abonnement lui-même, pas l'identifiant d'une pièce :
+                        `Reference` cherchait `a.id` dans `pieces`, où il
+                        n'existe jamais. Le lien vers l'écriture réelle vit
+                        maintenant sur chaque échéance payée, ci-dessous. */}
+                    <span style={{ fontSize: '.72rem', color: 'var(--g-500)' }}>
+                      {a.numero_piece ?? '—'}
+                    </span>
                   </td>
                   <td style={{ ...td, fontWeight: 500 }}>
                     {a.nom}
@@ -675,7 +679,13 @@ function Tableau({
             const j = daysUntil(e.date_prevue);
             return (
               <tr key={e.id} style={{ borderBottom: '1px solid var(--g-200)' }}>
-                <td style={td} className="mono">{e.periode}</td>
+                <td style={td} className="mono">
+                  {e.piece_id ? (
+                    <Reference id={e.piece_id} style={{ color: 'var(--navy)' }}>
+                      {e.periode}
+                    </Reference>
+                  ) : e.periode}
+                </td>
                 <td style={{ ...td, fontWeight: 500 }}>
                   {e.abonnements?.nom ?? abo?.nom ?? '—'}
                   <span className="muted" style={{ display: 'block', fontSize: 'var(--fs-xs)' }}>
