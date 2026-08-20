@@ -75,14 +75,14 @@ export default function ListeAbonnements({
 
   const manquants = echeances.filter((e) => e.statut === 'justificatif_manquant');
   const prochaines = echeances
-    .filter((e) => e.statut === 'attendue' && daysUntil(e.date_prevue) >= 0)
+    .filter((e) => e.statut === 'attendue' && (daysUntil(e.date_prevue) ?? -1) >= 0)
     .slice(0, 12);
 
   // Reconductions tacites approchant : c'est l'alerte qui rentabilise le module.
   const reconductions = actifs.filter((a) => {
     if (!a.engagement_jusquau) return false;
     const j = daysUntil(a.engagement_jusquau);
-    return j >= 0 && j <= 60;
+    return j !== null && j >= 0 && j <= 60;
   });
 
   const montants = useMemo(() => {
@@ -175,7 +175,7 @@ export default function ListeAbonnements({
     // Une charge se constate quand elle est engagée, jamais avant.
     // Enregistrer un prélèvement à venir gonflerait les charges de
     // l'exercice avec des montants qui n'ont pas été payés.
-    if (daysUntil(e.date_prevue) > 0) {
+    if ((daysUntil(e.date_prevue) ?? 0) > 0) {
       setErreur(
         `L'échéance du ${date(e.date_prevue)} n'est pas encore due. ` +
         "Une charge se constate à sa date, pas avant."
@@ -281,7 +281,7 @@ export default function ListeAbonnements({
             Reconduction tacite approchant
           </p>
           {reconductions.map((a) => {
-            const j = daysUntil(a.engagement_jusquau!);
+            const j = daysUntil(a.engagement_jusquau!) ?? 0;
             const limite = j - (a.preavis_jours ?? 30);
             return (
               <p key={a.id} style={{ fontSize: 'var(--fs-sm)', marginTop: '.5rem', lineHeight: 1.55 }}>
@@ -676,7 +676,7 @@ function Tableau({
         <tbody>
           {echeances.map((e) => {
             const abo = abonnements.find((a) => a.id === e.abonnement_id);
-            const j = daysUntil(e.date_prevue);
+            const j = daysUntil(e.date_prevue) ?? -1;
             return (
               <tr key={e.id} style={{ borderBottom: '1px solid var(--g-200)' }}>
                 <td style={td} className="mono">

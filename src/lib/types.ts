@@ -461,7 +461,7 @@ export type Facture = {
   nature: 'facture' | 'acompte' | 'solde' | 'avoir';
   facture_liee_id: string | null;
   date_emission: string;
-  date_echeance: string;
+  date_echeance: string | null;
   delai_paiement: number;
   objet: string | null;
   montant_ht: number;

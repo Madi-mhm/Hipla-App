@@ -74,7 +74,7 @@ export default function Banque({
 
   const derniere = synchronisations.find((s) => s.statut === 'reussie');
   const soldeBanque = derniere?.solde_qonto != null ? Number(derniere.solde_qonto) : null;
-  const joursDepuis = derniere ? -daysUntil(derniere.demarree_le) : null;
+  const joursDepuis = derniere ? -(daysUntil(derniere.demarree_le) ?? 0) : null;
   const synchroAncienne = joursDepuis === null || joursDepuis > 3;
 
   const aTraiter = transactions.filter(

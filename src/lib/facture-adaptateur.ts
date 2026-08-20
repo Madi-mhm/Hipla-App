@@ -126,7 +126,17 @@ export async function chargerModeleFacture(id: string): Promise<Resultat> {
   // Les mentions gelées à l'émission font foi. Un brouillon n'en a pas
   // encore : on prend l'état courant, et le document sort marqué
   // « brouillon ».
-  const brouillon = piece.etat === 'brouillon';
+  //
+  // Un devis est un cas à part : `etat` reste 'brouillon' toute sa vie
+  // par construction (un devis n'entre jamais en comptabilité — voir
+  // creer_devis) — ce n'est PAS le signal de brouillon pour un devis.
+  // Son vrai suivi (brouillon → envoyé → accepté) vit dans
+  // `devis_statut`, la colonne que « Marquer comme envoyé » modifie.
+  // Lire `etat` ici faisait que le tampon ne pouvait jamais disparaître
+  // d'un devis, quoi que l'utilisateur clique.
+  const brouillon = estDevis
+    ? piece.devis_statut === 'brouillon'
+    : piece.etat === 'brouillon';
   let source = (piece.mentions_gelees as Record<string, unknown> | null) ?? null;
 
   if (!source) {

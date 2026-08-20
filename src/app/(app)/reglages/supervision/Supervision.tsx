@@ -63,7 +63,7 @@ export default function Supervision({
     ? Math.round((1 - octetsStorage / octetsOrigine) * 100) : 0;
 
   const derniere = sauvegardes.find((s) => s.statut === 'reussie');
-  const joursDepuis = derniere ? -daysUntil(derniere.demarree_le) : null;
+  const joursDepuis = derniere ? -(daysUntil(derniere.demarree_le) ?? 0) : null;
 
   async function sauvegarder() {
     setEnCours(true);

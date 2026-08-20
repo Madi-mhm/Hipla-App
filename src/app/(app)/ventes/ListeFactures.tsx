@@ -282,8 +282,12 @@ export default function ListeFactures({
               </thead>
               <tbody>
                 {visibles.map((f) => {
-                  const j = daysUntil(f.date_echeance);
-                  const enRetard = j < 0 && ['emise', 'partielle', 'impayee'].includes(f.statut);
+                  // Un avoir, ou toute pièce sans échéance propre, porte
+                  // `date_echeance = null` — l'appeler sans garde faisait
+                  // planter toute la page sur la première ligne concernée.
+                  const j = f.date_echeance ? daysUntil(f.date_echeance) : null;
+                  const enRetard = j !== null && j < 0
+                    && ['emise', 'partielle', 'impayee'].includes(f.statut);
                   return (
                     <tr key={f.id} style={{
                       borderBottom: '1px solid var(--g-200)',

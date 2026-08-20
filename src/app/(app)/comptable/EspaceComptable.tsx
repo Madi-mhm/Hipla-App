@@ -76,8 +76,8 @@ export default function EspaceComptable({
   // Ce que l'on garde des échéances : le compte, la plus proche, les dépassées.
   const aVenir = echeances.filter((e) => !e.accomplie);
   const prochaine = aVenir[0] ?? null;
-  const joursProchaine = prochaine ? daysUntil(prochaine.echeance) : 0;
-  const enRetard = aVenir.filter((e) => daysUntil(e.echeance) < 0);
+  const joursProchaine = prochaine ? (daysUntil(prochaine.echeance) ?? 0) : 0;
+  const enRetard = aVenir.filter((e) => (daysUntil(e.echeance) ?? 0) < 0);
 
   const parType = anomalies.reduce<Record<string, Anomalie[]>>((acc, a) => {
     (acc[a.type] ??= []).push(a);

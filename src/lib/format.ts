@@ -44,9 +44,13 @@ export function dateLong(value: string | Date | null | undefined): string {
   }).format(d);
 }
 
-/** Nombre de jours entre aujourd'hui et une échéance. Négatif = dépassée. */
-export function daysUntil(value: string | Date): number {
+/** Nombre de jours entre aujourd'hui et une échéance. Négatif = dépassée.
+    `null` en l'absence de date — à l'appelant de décider quoi afficher,
+    jamais de plantage silencieux comme celui trouvé sur `/ventes`. */
+export function daysUntil(value: string | Date | null | undefined): number | null {
+  if (!value) return null;
   const d = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   d.setHours(0, 0, 0, 0);

@@ -46,7 +46,8 @@ export default function ListeTaches({
   });
 
   const enRetard = taches.filter(
-    (t) => t.echeance && t.statut !== 'faite' && t.statut !== 'annulee' && daysUntil(t.echeance) < 0
+    (t) => t.echeance && t.statut !== 'faite' && t.statut !== 'annulee'
+           && (daysUntil(t.echeance) ?? 0) < 0
   ).length;
 
   async function creer(e: React.FormEvent) {
