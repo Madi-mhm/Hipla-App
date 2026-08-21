@@ -13,7 +13,7 @@
  * que personne n'a vérifiée — et elle entre dans les déclarations.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Reference from '@/components/Reference';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -53,6 +53,21 @@ export default function ListeAbonnements({
   const [succes, setSucces] = useState<string | null>(null);
   const [aResilier, setAResilier] = useState<Abonnement | null>(null);
   const [aPasserPayant, setAPasserPayant] = useState<Abonnement | null>(null);
+  // Constatation en deux temps : la pièce ne se crée qu'après avoir
+  // choisi qui a payé — sans ça, tout retombait par défaut sur "La
+  // société", même quand l'abonnement est en réalité avancé par un
+  // associé (comme Ionos, payé personnellement par Mahdi mais jamais
+  // rattachable faute de ce choix).
+  const [aConstater, setAConstater] = useState<{ e: Echeance; abo: Abonnement } | null>(null);
+  const [payePar, setPayePar] = useState('societe');
+  const [payeurs, setPayeurs] = useState<
+    Array<{ valeur: string; libelle: string; avance: boolean }>>([]);
+
+  useEffect(() => {
+    createClient().rpc('payeurs_possibles').then(({ data }) => {
+      if (data) setPayeurs(data as typeof payeurs);
+    });
+  }, []);
 
   // --- formulaire de création ---
   const [nom, setNom] = useState('');
@@ -171,7 +186,7 @@ export default function ListeAbonnements({
    * Pré-remplie intégralement, mais déclenchée par un clic — l'application
    * propose, elle ne décide pas.
    */
-  async function constater(e: Echeance, abo: Abonnement) {
+  async function constater(e: Echeance, abo: Abonnement, payeurChoisi: string) {
     // Une charge se constate quand elle est engagée, jamais avant.
     // Enregistrer un prélèvement à venir gonflerait les charges de
     // l'exercice avec des montants qui n'ont pas été payés.
@@ -187,6 +202,12 @@ export default function ListeAbonnements({
     setErreur(null);
     const supabase = createClient();
 
+    // Même règle que sur les trois autres écrans de création de
+    // dépense : un payeur associé verrouille moyen_paiement sur
+    // 'avance_associe', seul champ que lit le compte courant.
+    const estAvance = payeurs.find((x) => x.valeur === payeurChoisi)?.avance;
+    const moyenPaiement = estAvance ? 'avance_associe' : (abo.mode_paiement ?? 'carte');
+
     const { data: res, error } = await supabase.rpc('creer_depense', {
       p_date: e.date_prevue,
       p_fournisseur: abo.fournisseur,
@@ -196,7 +217,8 @@ export default function ListeAbonnements({
       p_libelle: `${abo.nom} — ${e.periode}`,
       p_statut: 'validee',
       p_origine: 'abonnement',
-      p_moyen_paiement: abo.mode_paiement ?? 'carte',
+      p_moyen_paiement: moyenPaiement,
+      p_paye_par: payeurChoisi,
       p_notes: abo.autoliquidation
         ? 'TVA autoliquidée : déclarer en collectée et en déductible.'
         : null,
@@ -312,7 +334,7 @@ export default function ListeAbonnements({
             abonnements={abonnements}
             peutGerer={peutGerer}
             enCours={enCours}
-            onConstater={constater}
+            onConstater={(e, abo) => setAConstater({ e, abo })}
           />
         </div>
       )}
@@ -459,11 +481,54 @@ export default function ListeAbonnements({
         <div className="card">
           <p className="card__title">Prochaines échéances</p>
           <Tableau echeances={prochaines} abonnements={abonnements}
-            peutGerer={peutGerer} enCours={enCours} onConstater={constater} />
+            peutGerer={peutGerer} enCours={enCours}
+            onConstater={(e, abo) => setAConstater({ e, abo })} />
         </div>
       )}
 
       {/* ---------- Dialogues ---------- */}
+      {aConstater && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50,
+        }}>
+          <div className="card" style={{ maxWidth: 420, width: '90%' }}>
+            <p className="card__title">Constater {aConstater.abo.nom}</p>
+            <p style={{ fontSize: 'var(--fs-sm)', marginBottom: '.8rem' }}>
+              {money(Number(aConstater.abo.montant_ttc))} TTC — échéance du {date(aConstater.e.date_prevue)}
+            </p>
+            <label style={{ display: 'block', marginBottom: '1rem' }}>
+              <span>Payé par</span>
+              <select value={payePar} onChange={(e) => setPayePar(e.target.value)}>
+                {payeurs.length === 0 ? (
+                  <option value="societe">La société</option>
+                ) : payeurs.map((x) => (
+                  <option key={x.valeur} value={x.valeur}>{x.libelle}</option>
+                ))}
+              </select>
+            </label>
+            <div style={{ display: 'flex', gap: '.5rem' }}>
+              <button
+                onClick={() => {
+                  const c = aConstater;
+                  setAConstater(null);
+                  const p = payePar;
+                  setPayePar('societe');
+                  if (c) constater(c.e, c.abo, p);
+                }}
+                disabled={enCours}
+                className="btn btn--gold">
+                Constater
+              </button>
+              <button onClick={() => { setAConstater(null); setPayePar('societe'); }}
+                className="btn btn--ghost">
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Dialogue
         ouvert={aResilier !== null}
         titre={`Résilier ${aResilier?.nom ?? ''}`}
