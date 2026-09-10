@@ -19,7 +19,7 @@ export default async function Page() {
   if (error || !data) {
     return (
       <>
-        <Header titre="TVA" sousTitre="Suivi et déclaration" />
+        <Header section="tva" titre="TVA" sousTitre="Suivi et déclaration" />
         <div className="content">
           <div className="card">
             <p className="card__title" style={{ color: 'var(--danger)' }}>
@@ -36,7 +36,7 @@ export default async function Page() {
 
   return (
     <>
-      <Header titre="TVA" sousTitre="Exigible sur les encaissements et les paiements" />
+      <Header section="tva" titre="TVA" sousTitre="Exigible sur les encaissements et les paiements" />
       <div className="content">
         <SuiviTva suivi={data as Suivi} />
       </div>

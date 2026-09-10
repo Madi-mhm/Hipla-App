@@ -123,7 +123,7 @@ export default async function Page() {
 
   return (
     <>
-      <Header
+      <Header section="banque"
         titre="Justificatifs Qonto"
         sousTitre="Pièces déposées dans la banque, en attente de traitement"
       />

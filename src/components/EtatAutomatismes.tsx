@@ -102,7 +102,7 @@ export default function EtatAutomatismes({
 
       <div style={{ marginTop: '.9rem', display: 'flex', gap: '.6rem', flexWrap: 'wrap' }}>
         <Link href="/banque" className="btn btn--ghost btn--sm">Relancer la synchronisation</Link>
-        <Link href="/reglages/supervision" className="btn btn--ghost btn--sm">Supervision</Link>
+        <Link href="/reglages/sauvegardes" className="btn btn--ghost btn--sm">Supervision</Link>
       </div>
     </div>
   );

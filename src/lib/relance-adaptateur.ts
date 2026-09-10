@@ -57,15 +57,12 @@ export async function chargerModeleRelance(id: string): Promise<ResultatRelance>
     };
   }
 
-  const tiers = piece.tiers as Record<string, unknown> | null;
-
-  // Le client complet vit dans `clients` : `tiers` ne porte que le nom
-  // et le pays. L'adresse postale est indispensable à un courrier.
-  const { data: client } = await supabase
-    .from('clients')
-    .select('nom, adresse, code_postal, ville, contact_nom')
-    .ilike('nom', String(tiers?.nom ?? piece.tiers_libelle))
-    .limit(1).maybeSingle();
+  // L'adresse vient de la fiche tiers, déjà jointe. Elle était cherchée
+  // dans l'ancienne table `clients`, par le nom, et sur une colonne
+  // (`contact_nom`) qui n'existe pas : le courrier partait sans adresse.
+  const client = piece.tiers as {
+    nom?: string; adresse?: string; code_postal?: string; ville?: string; contact?: string;
+  } | null;
 
   const { data: reglementsBruts } = await supabase
     .from('reglements')
@@ -88,7 +85,10 @@ export async function chargerModeleRelance(id: string): Promise<ResultatRelance>
   }
   if (!source) return { erreur: 'Mentions de l\u2019entreprise indisponibles.' };
 
-  const aujourdhui = new Date().toISOString().slice(0, 10);
+  // Date de Paris : la date UTC était encore celle de la veille entre
+  // minuit et 2 h.
+  const aujourdhui = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris' })
+    .format(new Date());
   const echeance = texte(piece.date_echeance);
 
   // Le retard se compte en jours pleins depuis l'échéance. Sans
@@ -110,14 +110,23 @@ export async function chargerModeleRelance(id: string): Promise<ResultatRelance>
     courriel:     texte(source.email ?? source.courriel),
     iban:         texte(source.iban),
     bic:          texte(source.bic),
-    banque:       texte(source.banque),
-    mentionsPied: String(source.mentions_pied ?? source.pied_de_page ?? ''),
+    banque:       texte(source.banque ?? source.banque_nom),
+    // Toute correspondance commerciale porte forme, capital, RCS et SIRET
+    // (art. R123-237 du code de commerce). Les mentions n'ont pas de clé
+    // « pied de page » : on le compose.
+    mentionsPied: String(source.mentions_pied ?? source.pied_de_page ?? [
+      [source.raison_sociale, source.forme_juridique].filter(Boolean).join(' '),
+      source.capital ? `au capital de ${source.capital} €` : null,
+      source.rcs,
+      source.siret ? `SIRET ${source.siret}` : null,
+      source.tva_intracom ? `TVA ${source.tva_intracom}` : null,
+    ].filter(Boolean).join(' · ')),
 
     clientNom:        String(client?.nom ?? piece.tiers_libelle),
     clientAdresse:    texte(client?.adresse),
     clientCodePostal: texte(client?.code_postal),
     clientVille:      texte(client?.ville),
-    clientContact:    texte(client?.contact_nom),
+    clientContact:    texte(client?.contact),
 
     numeroPiece:  String(piece.numero_piece ?? '—'),
     dateEmission: String(piece.date_piece),

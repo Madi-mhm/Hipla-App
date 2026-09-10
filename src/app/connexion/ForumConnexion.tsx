@@ -38,7 +38,10 @@ export default function ForumConnexion() {
       p_details: null,
     });
 
-    router.push(params.get('suite') ?? '/');
+    // Seul un chemin interne est suivi : « //site », « /\site » ou
+    // « https://… » mèneraient hors de l'application après la connexion.
+    const suite = params.get('suite');
+    router.push(suite && suite.startsWith('/') && !/^\/[\/\\]/.test(suite) ? suite : '/');
     router.refresh();
   }
 

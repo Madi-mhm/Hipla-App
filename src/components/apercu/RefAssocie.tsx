@@ -73,7 +73,7 @@ export default function RefAssocie({ identifiant, children, style, className, ti
 
   return (
     <>
-      <Link href={`/associes/${identifiant}`} onClick={ouvrir}
+      <Link href={`/comptabilite/associes/${identifiant}`} onClick={ouvrir}
         data-fenetre="oui"
         style={{ cursor: 'pointer', ...style }}
         className={className} title={title ?? 'Voir l’associé'}>

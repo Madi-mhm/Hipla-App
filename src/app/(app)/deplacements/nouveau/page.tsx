@@ -54,7 +54,7 @@ export default async function Page(
 
   return (
     <>
-      <Header
+      <Header section="deplacements"
         titre="Nouveau trajet"
         sousTitre={peut(profil.role, 'depenses', 'validate')
           ? undefined : 'Sera soumis à validation'}

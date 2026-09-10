@@ -5,7 +5,8 @@ import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import { statutVente, natureVente } from '@/lib/registre';
 import ListeFactures from './ListeFactures';
-import type { Facture, Client, Prestation } from '@/lib/types';
+import type { Facture, Prestation } from '@/lib/types';
+import type { Tiers } from '@/lib/registre';
 
 export const metadata = { title: 'Ventes — Hipla Gestion' };
 export const dynamic = 'force-dynamic';
@@ -32,7 +33,8 @@ export default async function Page() {
         .in('nature', ['vente', 'avoir'])
         .order('date_piece', { ascending: false })
         .limit(200),
-      supabase.from('clients').select('*').eq('actif', true).order('nom'),
+      // Les clients sont des tiers : c'est ce que lisent les factures.
+      supabase.from('tiers').select('*').eq('est_client', true).eq('actif', true).order('nom'),
       supabase.from('prestations').select('*').eq('actif', true).order('ordre'),
       supabase.rpc('etat_ventes'),
     ]);
@@ -91,11 +93,11 @@ export default async function Page() {
 
   return (
     <>
-      <Header titre="Ventes" sousTitre="Factures, devis et encaissements" />
+      <Header section="ventes" titre="Ventes" sousTitre="Factures, devis et encaissements" />
       <div className="content">
         <ListeFactures
           factures={factures as unknown as Facture[]}
-          clients={(clients ?? []) as Client[]}
+          clients={(clients ?? []) as Tiers[]}
           prestations={(prestations ?? []) as Prestation[]}
           etat={etat}
           peutGerer={peut(profil.role, 'ventes', 'update')}

@@ -27,7 +27,7 @@ export default async function Page() {
 
   return (
     <>
-      <Header
+      <Header section="tva"
         titre="Déclarations de TVA"
         sousTitre="Ce qui a été déclaré, figé au moment du dépôt"
       />

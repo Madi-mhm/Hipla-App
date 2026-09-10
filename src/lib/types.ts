@@ -13,6 +13,9 @@ export type Categorie = {
   bloque: boolean;
   actif: boolean;
   ordre: number;
+  /** Bien : TVA exigible à la facture. Service : au paiement. */
+  type_operation: 'bien' | 'service';
+  justificatif_requis: boolean;
 };
 
 export type Depense = {
@@ -535,6 +538,7 @@ export const LIBELLE_TYPE_CLIENT: Record<string, string> = {
   syndic: 'Syndic',
   conciergerie: 'Conciergerie',
   collectivite: 'Collectivité',
+  administration: 'Administration',
 };
 
 export const LIBELLE_UNITE: Record<string, string> = {

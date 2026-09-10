@@ -27,7 +27,7 @@ export default async function Page() {
 
   return (
     <>
-      <Header
+      <Header section="reglages"
         titre="Journal d'audit"
         sousTitre={
           complet

@@ -5,15 +5,14 @@
  * La clé API est en lecture : l'application ne peut rien écrire dans la
  * banque, ce qui exclut par construction tout mouvement d'argent.
  *
- * Le rapprochement n'agit seul que dans deux cas : une échéance
- * d'abonnement dont le montant était connu d'avance et que la banque
- * confirme à l'identique, et une dépense déjà saisie à laquelle la
- * transaction se rattache sans rien créer. Tout le reste attend une
- * décision humaine.
+ * Le rapprochement n'agit seul que dans un cas : une dépense déjà saisie
+ * à laquelle la transaction se rattache sans ambiguïté, sans rien créer.
+ * Tout le reste attend une décision humaine.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { cronAutorise } from '@/lib/cron';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -67,9 +66,7 @@ function entetesQonto() {
 }
 
 export async function GET(request: NextRequest) {
-  const attendu = process.env.CRON_SECRET;
-  const recu = request.headers.get('authorization');
-  if (attendu && recu !== `Bearer ${attendu}`) {
+  if (!cronAutorise(request.headers.get('authorization'))) {
     return NextResponse.json({ erreur: 'Non autorisé' }, { status: 401 });
   }
   return synchroniser('cron');
@@ -224,20 +221,11 @@ async function synchroniser(declencheur: 'cron' | 'manuel') {
       }
     }
 
-    // ---- 3. Échéances d'abonnement ----
-    // Le seul cas où une écriture naît sans humain : un montant déclaré
-    // d'avance que la banque confirme au centime. Le reste est laissé au
-    // moteur d'appariement, plus bas.
-    for (const id of nouveauxIds) {
-      const { data: res } = await db.rpc('echeance_pour_transaction', { p_transaction: id });
-      const e = res as Record<string, unknown> | null;
-      if (!e?.echeance_id) continue;
+    // Les abonnements ont été retirés de l'application : la synchronisation
+    // ne crée plus d'écriture d'office à partir d'une échéance. Chaque
+    // dépense se saisit (ou se duplique) à la main.
 
-      const cree = await constaterEcheance(db, id, e);
-      if (cree) auto += 1;
-    }
-
-    // ---- 4. Justificatifs déposés dans Qonto ----
+    // ---- 3. Justificatifs déposés dans Qonto ----
     // Une pièce jointe côté banque suffit à créer l'écriture : elle est
     // extraite puis soumise à validation, jamais enregistrée d'office.
     // La récupération portait sur les seules opérations NOUVELLES. Une
@@ -447,72 +435,3 @@ function normaliserStatut(s: string): string {
   return m[s] ?? 'pending';
 }
 
-/**
- * Constate une échéance d'abonnement dont le montant correspond
- * exactement au prélèvement observé.
- */
-async function constaterEcheance(
-  db: ReturnType<typeof admin>,
-  transactionId: string,
-  r: Record<string, unknown>
-): Promise<boolean> {
-  const echeanceId = r.echeance_id as string;
-
-  const { data: e } = await db
-    .from('abonnement_echeances')
-    .select('*, abonnements(*)')
-    .eq('id', echeanceId).single();
-  if (!e) return false;
-
-  const a = e.abonnements as Record<string, unknown>;
-  const { data: t } = await db
-    .from('transactions_qonto').select('date_operation').eq('id', transactionId).single();
-
-  // Chemin unique : la fonction calcule les montants d'après la
-  // catégorie, attribue le numéro de pièce, crée le règlement et
-  // journalise. Le régime de TVA est imposé, car aucune facture n'est
-  // ici disponible pour le déduire — c'est le contrat qui le sait.
-  const { data: res, error: eAchat } = await db.rpc('creer_achat', {
-    p_date: t?.date_operation ?? e.date_prevue,
-    p_tiers: a.fournisseur,
-    p_categorie: a.categorie_id,
-    p_montant_ttc: a.montant_ttc,
-    p_taux_tva: a.taux_tva,
-    p_objet: `${a.nom} — ${e.periode}`,
-    p_etat: 'validee',
-    p_origine: 'abonnement',
-    p_transaction: transactionId,
-    p_moyen_paiement: 'prelevement',
-    p_paye_par: 'societe',
-    p_notes: a.autoliquidation
-      ? 'TVA autoliquidée : collectée et déduite sur la même déclaration.'
-      : 'Constatée automatiquement : montant déclaré confirmé par la banque.',
-    p_regime: a.autoliquidation ? 'autoliquidation' : null,
-  });
-
-  if (eAchat) return false;
-  const dep = res as { id?: string; numero_piece?: string } | null;
-  if (!dep?.id) return false;
-
-  await db.from('abonnement_echeances').update({
-    statut: 'payee',
-    date_constatee: t?.date_operation ?? null,
-    montant_reel: a.montant_ttc,
-    // `piece_id`, pas `depense_id` : la table `depenses` a été
-    // supprimée, et l'ancienne colonne ne fait plus que subsister.
-    piece_id: dep.id,
-    transaction_qonto_id: transactionId,
-  }).eq('id', echeanceId);
-
-  await db.from('transactions_qonto').update({
-    statut_traitement: 'rattachee',
-    // `piece_id`, pas `depense_id` : la table `depenses` a été
-    // supprimée, et l'ancienne colonne ne fait plus que subsister.
-    piece_id: dep.id,
-    echeance_id: echeanceId,
-    rattachement_auto: true,
-    rattache_le: new Date().toISOString(),
-  }).eq('id', transactionId);
-
-  return true;
-}

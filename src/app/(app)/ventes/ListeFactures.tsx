@@ -20,8 +20,10 @@ import { money, date, daysUntil } from '@/lib/format';
 import Alerte from '@/components/Alerte';
 import {
   LIBELLE_STATUT_FACTURE, CLASSE_STATUT_FACTURE, LIBELLE_NATURE_FACTURE,
-  type Facture, type Client, type Prestation,
+  type Facture, type Prestation,
 } from '@/lib/types';
+import type { Tiers } from '@/lib/registre';
+import { aujourdhuiIso } from '@/lib/dates';
 import styles from './ventes.module.css';
 
 type Etat = {
@@ -33,7 +35,7 @@ type Etat = {
 
 type Props = {
   factures: Facture[];
-  clients: Client[];
+  clients: Tiers[];
   prestations: Prestation[];
   etat: Etat;
   peutGerer: boolean;
@@ -52,7 +54,7 @@ export default function ListeFactures({
   const [clientId, setClientId] = useState('');
   const [nature, setNature] = useState('facture');
   const [objet, setObjet] = useState('');
-  const [dateEmission, setDateEmission] = useState(new Date().toISOString().slice(0, 10));
+  const [dateEmission, setDateEmission] = useState(aujourdhuiIso);
   const [delai, setDelai] = useState('15');
   const [factureLiee, setFactureLiee] = useState('');
 
@@ -61,9 +63,11 @@ export default function ListeFactures({
   );
   const visibles = vue === 'ouvertes' ? ouvertes : factures;
 
-  // Une facture de solde se rattache à un acompte déjà émis.
+  // Une facture de solde se rattache à un acompte déjà ÉMIS : un
+  // brouillon d'acompte n'a encore rien facturé.
   const acomptes = useMemo(
-    () => factures.filter((f) => f.nature === 'acompte' && f.statut !== 'annulee'),
+    () => factures.filter((f) => f.nature === 'acompte'
+      && f.statut !== 'annulee' && f.statut !== 'brouillon'),
     [factures]
   );
 
@@ -75,14 +79,19 @@ export default function ListeFactures({
     setErreur(null);
     setEnCours(true);
 
+    // `creer_vente` reçoit directement le tiers. `creer_facture` passait
+    // par l'ancienne table `clients` et retrouvait le tiers par le nom.
+    // Un délai de 0 jour (paiement à réception) reste 0 : `|| 15` le
+    // transformait en 15.
+    const jours = parseInt(delai, 10);
     const supabase = createClient();
-    const { data: res, error } = await supabase.rpc('creer_facture', {
-      p_client: clientId,
-      p_nature: nature,
-      p_facture_liee: nature === 'solde' && factureLiee ? factureLiee : null,
+    const { data: res, error } = await supabase.rpc('creer_vente', {
+      p_tiers: clientId,
+      p_nature: nature === 'facture' ? 'vente' : nature,
+      p_piece_liee: nature === 'solde' && factureLiee ? factureLiee : null,
       p_date: dateEmission,
       p_objet: objet.trim() || null,
-      p_delai: parseInt(delai, 10) || 15,
+      p_delai: Number.isNaN(jours) ? 15 : jours,
     });
 
     if (error || !res) {
@@ -170,7 +179,7 @@ export default function ListeFactures({
           {clients.length === 0 ? (
             <p className="muted" style={{ fontSize: 'var(--fs-sm)', marginTop: '.7rem' }}>
               Aucun client enregistré.{' '}
-              <Link href="/clients" style={{ color: 'var(--gold-ink)' }}>
+              <Link href="/tiers" style={{ color: 'var(--gold-ink)' }}>
                 Créez-en un d'abord
               </Link>.
             </p>

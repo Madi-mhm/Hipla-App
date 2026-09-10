@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { deposer, lister, supprimer, r2Configure } from '@/lib/r2';
+import { cronAutorise } from '@/lib/cron';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -95,9 +96,7 @@ function admin() {
 
 export async function GET(request: NextRequest) {
   // Le cron Vercel envoie CRON_SECRET ; le déclenchement manuel passe par POST.
-  const attendu = process.env.CRON_SECRET;
-  const recu = request.headers.get('authorization');
-  if (attendu && recu !== `Bearer ${attendu}`) {
+  if (!cronAutorise(request.headers.get('authorization'))) {
     return NextResponse.json({ erreur: 'Non autorisé' }, { status: 401 });
   }
   return executer('cron', null);
@@ -141,11 +140,6 @@ async function executer(declencheur: 'cron' | 'manuel', utilisateur: string | nu
   const idJournal = journal?.id as string | undefined;
 
   try {
-    // ---------- 0. Entretien des échéances d'abonnement ----------
-    // Profite du passage du cron : l'horizon glissant est maintenu et
-    // les justificatifs manquants sont marqués.
-    await db.rpc('generer_echeances');
-    await db.rpc('marquer_justificatifs_manquants');
 
     // ---------- 1. Export de la base ----------
     const horodatage = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

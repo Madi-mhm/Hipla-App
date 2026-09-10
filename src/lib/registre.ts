@@ -30,9 +30,14 @@ export type Tiers = {
   code_postal: string | null;
   ville: string | null;
   pays: string;
+  /** Code pays sur deux lettres : c'est lui qui décide l'autoliquidation. */
+  pays_code: string | null;
   siret: string | null;
   tva_intracom: string | null;
+  /** Doublon historique de `tva_intracom`, tenu identique à l'écriture. */
+  numero_tva: string | null;
   delai_paiement: number;
+  notes: string | null;
   actif: boolean;
 };
 

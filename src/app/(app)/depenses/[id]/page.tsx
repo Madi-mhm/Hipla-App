@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
+import Link from 'next/link';
 import Header from '@/components/Header';
 import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
@@ -114,10 +115,19 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   return (
     <>
       <Header
+        section="depenses"
         titre={piece.tiers_libelle}
         sousTitre={piece.numero_piece ? `Pièce ${piece.numero_piece}` : 'Détail de la dépense'}
       />
       <div className="content">
+        {/* Ce qui remplace les abonnements : la même dépense, le mois suivant. */}
+        {peut(profil.role, 'depenses', 'create') && piece.nature !== 'km' && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '.75rem' }}>
+            <Link href={`/depenses/nouvelle?depuis=${id}`} className="btn btn--ghost btn--sm">
+              Dupliquer pour une nouvelle dépense
+            </Link>
+          </div>
+        )}
         <DetailDepense
           depense={depense as unknown as Depense}
           categories={(cats ?? []) as Categorie[]}
