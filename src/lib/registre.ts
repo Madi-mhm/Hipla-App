@@ -161,23 +161,6 @@ export function statutSaisie(etat: string): string {
   }
 }
 
-/**
- * État bancaire d'une pièce.
- *
- * Ce n'est pas un statut stocké mais la lecture de deux faits : une
- * opération est-elle rattachée, et en attend-on une ? Une avance
- * d'associé n'en attend aucune — la compter comme manquante était le
- * faux positif qui masquait les vraies anomalies.
- */
-export function etatBancaire(p: {
-  transaction_id: string | null;
-  attendu_en_banque: boolean;
-}): string {
-  if (p.transaction_id) return 'confirme';
-  if (!p.attendu_en_banque) return 'sans_objet';
-  return 'sans_transaction';
-}
-
 /** Candidat au rapprochement, tel que le renvoie le moteur. */
 export type Candidat = {
   transaction_id: string;

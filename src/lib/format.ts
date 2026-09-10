@@ -16,14 +16,6 @@ export function money(value: number | null | undefined): string {
   return value < 0 ? `(${s})` : s;
 }
 
-/** 0.2 → « 20 % » */
-export function percent(value: number): string {
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'percent',
-    maximumFractionDigits: 1,
-  }).format(value);
-}
-
 /** '2026-07-31' → « 31/07/2026 » */
 export function date(value: string | Date | null | undefined): string {
   if (!value) return '—';
@@ -115,14 +107,4 @@ export function montantSaisi(saisie: string): number | null {
 
   const v = Number(s);
   return Number.isFinite(v) ? v : null;
-}
-
-/**
- * Variante pour les montants qui ne peuvent pas être négatifs — le cas
- * de toutes les saisies de l'application, un avoir se signalant par sa
- * nature et non par un signe moins.
- */
-export function montantPositif(saisie: string): number | null {
-  const v = montantSaisi(saisie);
-  return v !== null && v >= 0 ? v : null;
 }

@@ -434,8 +434,10 @@ function Ventilation({ categories, total }: { categories: Categorie[]; total: nu
     const dy = ecart * Math.sin(milieu);
 
     const grand = fin - debut > Math.PI ? 1 : 0;
+    // Arrondi au centième : le serveur et le navigateur ne donnent pas
+    // exactement les mêmes décimales, et React signalait l'écart.
     const p = (rayon: number, a: number) =>
-      `${cx + dx + rayon * Math.cos(a)} ${cy + dy + rayon * Math.sin(a)}`;
+      `${(cx + dx + rayon * Math.cos(a)).toFixed(2)} ${(cy + dy + rayon * Math.sin(a)).toFixed(2)}`;
 
     return {
       cle: c.categorie + c.compte,

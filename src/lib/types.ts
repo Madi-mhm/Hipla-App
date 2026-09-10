@@ -171,35 +171,6 @@ export type Commentaire = {
   profils?: { nom_complet: string };
 };
 
-export type Tache = {
-  id: string;
-  titre: string;
-  description: string | null;
-  echeance: string | null;
-  priorite: 'basse' | 'normale' | 'haute';
-  statut: 'a_faire' | 'en_cours' | 'faite' | 'annulee';
-  table_cible: string | null;
-  id_cible: string | null;
-  numero_piece: string | null;
-  assignee_a: string | null;
-  cree_par: string;
-  cree_le: string;
-  faite_le: string | null;
-  recurrence: 'mensuelle' | 'trimestrielle' | 'annuelle' | null;
-  assigne?: { nom_complet: string };
-  auteur?: { nom_complet: string };
-};
-
-export type Anomalie = {
-  id: string;
-  numero_piece: string | null;
-  source: string;
-  type: string;
-  message: string;
-  date_piece: string;
-  tiers: string;
-};
-
 export const LIBELLE_TYPE_COMMENTAIRE: Record<string, string> = {
   remarque: 'Remarque',
   anomalie: 'Anomalie',
@@ -213,123 +184,6 @@ export const CLASSE_TYPE_COMMENTAIRE: Record<string, string> = {
   question: 'badge--info',
   demande_piece: 'badge--warning',
 };
-
-export const LIBELLE_PRIORITE: Record<string, string> = {
-  basse: 'Basse', normale: 'Normale', haute: 'Haute',
-};
-
-export const LIBELLE_STATUT_TACHE: Record<string, string> = {
-  a_faire: 'À faire', en_cours: 'En cours', faite: 'Faite', annulee: 'Annulée',
-};
-
-export const CLASSE_STATUT_TACHE: Record<string, string> = {
-  a_faire: 'badge--warning',
-  en_cours: 'badge--info',
-  faite: 'badge--success',
-  annulee: 'badge--neutral',
-};
-
-export const LIBELLE_TYPE_ANOMALIE: Record<string, string> = {
-  montants: 'Montants incohérents',
-  tva: 'TVA non déductible',
-  justificatif: 'Justificatif manquant',
-  exercice: 'Hors exercice',
-  ratification: 'Non ratifié',
-};
-
-export type Abonnement = {
-  id: string;
-  numero_piece: string | null;
-  nom: string;
-  fournisseur: string;
-  categorie_id: string | null;
-  montant_ht: number;
-  taux_tva: number;
-  montant_tva: number;
-  montant_ttc: number;
-  devise: string;
-  autoliquidation: boolean;
-  pays_prestataire: 'FR' | 'UE' | 'HORS_UE';
-  periodicite: 'mensuel' | 'trimestriel' | 'annuel';
-  date_debut: string;
-  date_fin: string | null;
-  mode_paiement: string | null;
-  engagement_jusquau: string | null;
-  preavis_jours: number | null;
-  url_espace_client: string | null;
-  identifiant_contrat: string | null;
-  statut: 'actif' | 'gratuit' | 'suspendu' | 'resilie';
-  motif_resiliation: string | null;
-  notes: string | null;
-  categories?: { libelle: string };
-};
-
-export type Echeance = {
-  id: string;
-  abonnement_id: string;
-  periode: string;
-  date_prevue: string;
-  date_constatee: string | null;
-  montant_prevu: number;
-  montant_reel: number | null;
-  statut: 'attendue' | 'payee' | 'justificatif_manquant' | 'ecart' | 'annulee';
-  /** Colonne réelle depuis la migration 046. `depense_id` est conservée
-      dans la base le temps de la transition, mais n'est plus écrite :
-      c'est `piece_id` qui pointe vers l'écriture réelle du registre. */
-  piece_id: string | null;
-  /** @deprecated conservée dans la base, plus jamais écrite depuis la 046. */
-  depense_id: string | null;
-  transaction_qonto_id: string | null;
-  abonnements?: { nom: string; fournisseur: string };
-};
-
-export const LIBELLE_PERIODICITE: Record<string, string> = {
-  mensuel: 'Mensuel', trimestriel: 'Trimestriel', annuel: 'Annuel',
-};
-
-export const LIBELLE_STATUT_ABO: Record<string, string> = {
-  actif: 'Actif', gratuit: 'Gratuit', suspendu: 'Suspendu', resilie: 'Résilié',
-};
-
-export const CLASSE_STATUT_ABO: Record<string, string> = {
-  actif: 'badge--success',
-  gratuit: 'badge--info',
-  suspendu: 'badge--warning',
-  resilie: 'badge--neutral',
-};
-
-export const LIBELLE_STATUT_ECHEANCE: Record<string, string> = {
-  attendue: 'Attendue',
-  payee: 'Payée',
-  justificatif_manquant: 'Justificatif manquant',
-  ecart: 'Écart de montant',
-  annulee: 'Annulée',
-};
-
-export const CLASSE_STATUT_ECHEANCE: Record<string, string> = {
-  attendue: 'badge--neutral',
-  payee: 'badge--success',
-  justificatif_manquant: 'badge--danger',
-  ecart: 'badge--warning',
-  annulee: 'badge--neutral',
-};
-
-export const LIBELLE_PAYS: Record<string, string> = {
-  FR: 'France', UE: 'Union européenne', HORS_UE: 'Hors Union européenne',
-};
-
-/** Ramène un montant à son équivalent mensuel, toutes périodicités confondues. */
-export function coutMensuel(montant: number, periodicite: string): number {
-  if (periodicite === 'trimestriel') return montant / 3;
-  if (periodicite === 'annuel') return montant / 12;
-  return montant;
-}
-
-export function coutAnnuel(montant: number, periodicite: string): number {
-  if (periodicite === 'trimestriel') return montant * 4;
-  if (periodicite === 'annuel') return montant;
-  return montant * 12;
-}
 
 export type TransactionQonto = {
   id: string;
@@ -407,42 +261,6 @@ export const LIBELLE_SYNCHRONISATION: Record<string, string> = {
   en_cours: 'En cours',
 };
 
-export const LIBELLE_RAPPROCHEMENT: Record<string, string> = {
-  sans_transaction: 'Sans opération bancaire',
-  propose: 'Rapprochement proposé',
-  confirme: 'Rapproché',
-  sans_objet: 'Sans objet',
-};
-
-export const CLASSE_RAPPROCHEMENT: Record<string, string> = {
-  sans_transaction: 'badge--warning',
-  propose: 'badge--info',
-  confirme: 'badge--success',
-  sans_objet: 'badge--neutral',
-};
-
-export type Client = {
-  id: string;
-  numero_piece: string | null;
-  type: 'particulier' | 'professionnel' | 'syndic' | 'conciergerie' | 'collectivite';
-  nom: string;
-  contact: string | null;
-  email: string | null;
-  telephone: string | null;
-  adresse: string | null;
-  code_postal: string | null;
-  ville: string | null;
-  pays: string;
-  siret: string | null;
-  tva_intracom: string | null;
-  delai_paiement: number;
-  notes: string | null;
-  actif: boolean;
-  cree_par?: string | null;
-  cree_le?: string;
-  modifie_le?: string;
-};
-
 export type Prestation = {
   id: string;
   libelle: string;
@@ -492,46 +310,6 @@ export type Facture = {
   clients?: { nom: string; type: string; email: string | null };
 };
 
-export type Devis = {
-  id: string;
-  numero_piece: string | null;
-  client_id: string;
-  date_emission: string;
-  validite_jours: number;
-  objet: string | null;
-  montant_ht: number;
-  montant_tva: number;
-  montant_ttc: number;
-  statut: 'brouillon' | 'envoye' | 'accepte' | 'refuse' | 'expire' | 'annule';
-  date_reponse: string | null;
-  facture_id: string | null;
-  motif_refus: string | null;
-  conditions: string | null;
-  notes: string | null;
-  cree_par?: string | null;
-  cree_le?: string;
-  modifie_le?: string;
-  clients?: { nom: string };
-};
-
-export type LigneDocument = {
-  id: string;
-  devis_id: string | null;
-  facture_id: string | null;
-  prestation_id: string | null;
-  ordre: number;
-  libelle: string;
-  description: string | null;
-  quantite: number;
-  unite: string | null;
-  prix_unitaire_ht: number;
-  remise_pct: number;
-  taux_tva: number;
-  montant_ht: number;
-  montant_tva: number;
-  montant_ttc: number;
-};
-
 export const LIBELLE_TYPE_CLIENT: Record<string, string> = {
   particulier: 'Particulier',
   professionnel: 'Professionnel',
@@ -555,17 +333,6 @@ export const CLASSE_STATUT_FACTURE: Record<string, string> = {
   brouillon: 'badge--neutral', emise: 'badge--info',
   encaissee: 'badge--success', partielle: 'badge--warning',
   impayee: 'badge--danger', annulee: 'badge--neutral',
-};
-
-export const LIBELLE_STATUT_DEVIS: Record<string, string> = {
-  brouillon: 'Brouillon', envoye: 'Envoyé', accepte: 'Accepté',
-  refuse: 'Refusé', expire: 'Expiré', annule: 'Annulé',
-};
-
-export const CLASSE_STATUT_DEVIS: Record<string, string> = {
-  brouillon: 'badge--neutral', envoye: 'badge--info',
-  accepte: 'badge--success', refuse: 'badge--danger',
-  expire: 'badge--warning', annule: 'badge--neutral',
 };
 
 export const LIBELLE_NATURE_FACTURE: Record<string, string> = {

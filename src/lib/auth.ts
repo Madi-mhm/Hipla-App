@@ -25,19 +25,3 @@ export async function profilCourant(): Promise<Profil | null> {
 
   return (data as Profil) ?? null;
 }
-
-/** Écrit une ligne dans le journal d'audit. */
-export async function journaliser(
-  action: string,
-  table?: string,
-  id?: string,
-  details?: Record<string, unknown>
-) {
-  const supabase = await createClient();
-  await supabase.rpc('journaliser', {
-    p_action: action,
-    p_table: table ?? null,
-    p_id: id ?? null,
-    p_details: details ?? null,
-  });
-}

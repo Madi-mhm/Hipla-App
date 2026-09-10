@@ -18,7 +18,6 @@ import Reference from '@/components/Reference';
 import RefBanque from '@/components/apercu/RefBanque';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { compresser, poids } from '@/lib/compression';
 import { money, date, dateLong, daysUntil } from '@/lib/format';
 import Dialogue from '@/components/Dialogue';
 import Alerte from '@/components/Alerte';
@@ -68,9 +67,6 @@ export default function Banque({
   // comptable et supprime le règlement — partait au premier clic. Le geste
   // destructeur était le seul non protégé.
   const [aDefaire, setADefaire] = useState<TransactionQonto | null>(null);
-  const [aCreer, setACreer] = useState<TransactionQonto | null>(null);
-  const [categorieCreation, setCategorieCreation] = useState('');
-  const [pieceCreation, setPieceCreation] = useState<File | null>(null);
 
   const derniere = synchronisations.find((s) => s.statut === 'reussie');
   const soldeBanque = derniere?.solde_qonto != null ? Number(derniere.solde_qonto) : null;
@@ -148,81 +144,8 @@ export default function Banque({
     router.refresh();
   }
 
-  /**
-   * Transforme une opération en dépense. Le montant vient de la banque,
-   * donc il est certain ; la dépense arrive néanmoins en attente, car
-   * l'affectation comptable, elle, reste une interprétation.
-   */
-  async function creerDepense(t: TransactionQonto, categorieId: string, piece: File | null) {
-    const cat = categories.find((c) => c.id === categorieId);
-    if (!cat) { setErreur('Choisissez une catégorie.'); return; }
-
-    setEnCours(true);
-    const supabase = createClient();
-
-    // La fonction en base porte les règles communes : calcul de la TVA
-    // déductible, numéro de pièce, statut de rapprochement, journalisation.
-    // L'opération étant désignée explicitement, le lien est certain et le
-    // rapprochement naît confirmé.
-    const { data: res, error } = await supabase.rpc('creer_depense', {
-      p_date: t.date_operation,
-      p_fournisseur: t.contrepartie ?? t.libelle,
-      p_categorie: cat.id,
-      p_montant_ttc: Number(t.montant),
-      p_libelle: t.libelle,
-      p_statut: 'en_attente',
-      p_origine: 'banque',
-      p_transaction: t.id,
-      p_moyen_paiement: 'carte',
-      p_notes: 'Créée depuis une opération bancaire. Justificatif à joindre.',
-    });
-
-    if (error || !res) {
-      setErreur(`Création impossible : ${error?.message}`);
-      setEnCours(false);
-      return;
-    }
-
-    const dep = res as { id: string; numero_piece: string };
-
-    // Mémorise le libellé : au troisième rattachement identique, le
-    // rapprochement deviendra automatique.
-    await supabase.rpc('memoriser_libelle', {
-      p_libelle: t.contrepartie ?? t.libelle,
-      p_fournisseur: t.contrepartie ?? t.libelle,
-      p_categorie: cat.id,
-    });
-
-    // Le justificatif est joint dans le même geste : revenir plus tard
-    // sur la dépense pour l'ajouter est une étape de trop.
-    if (piece) {
-      const chemin = `${dep.id}/${Date.now()}-${piece.name}`;
-      const { error: eUp } = await supabase.storage
-        .from('justificatifs').upload(chemin, piece);
-      if (!eUp) {
-        await supabase.from('justificatifs').insert({        // `piece_id` directement. La colonne `depense_id` n'existe plus
-        // que pour un déclencheur de compatibilité, `trg_rerouter_justificatif`,
-        // qui la réécrit en `piece_id` — et qui disparaîtra avec la table
-        // `depenses`. Écrire la bonne colonne dès maintenant permet de
-        // retirer l'ancienne table sans casser le dépôt de justificatifs.
-
-          piece_id: dep.id,
-          chemin,
-          nom_original: piece.name,
-          type_mime: piece.type,
-          taille_octets: piece.size,
-          cree_par: utilisateurId,
-        });
-      }
-    }
-
-    setSucces(
-      `${dep.numero_piece} créée en attente et rapprochée.` +
-      (piece ? ' Justificatif joint.' : ' Pensez à joindre le justificatif.')
-    );
-    setEnCours(false);
-    router.refresh();
-  }
+  // La création d'une dépense depuis une opération se fait sur la fiche de
+  // l'opération (/banque/[id]), qui connaît le régime de TVA et les associés.
 
   async function defaireRattachement(t: TransactionQonto) {
     setEnCours(true);
@@ -644,72 +567,6 @@ export default function Banque({
         }}
         onAnnuler={() => setADefaire(null)}
       />
-
-      {aCreer && (
-        <div className={styles.voile} onClick={() => setACreer(null)}>
-          <div className={styles.boite} onClick={(e) => e.stopPropagation()}>
-            <h2 className={styles.titreDialogue}>Créer une dépense</h2>
-            <p className={styles.descriptionDialogue}>
-              {aCreer.contrepartie ?? aCreer.libelle} — {money(Number(aCreer.montant))} le{' '}
-              {date(aCreer.date_operation)}. Le montant vient de la banque et ne
-              peut pas être faux ; l'affectation comptable, elle, reste à
-              confirmer. La dépense sera créée en attente.
-            </p>
-
-            <label className={styles.champDialogue}>
-              <span>Catégorie</span>
-              <select value={categorieCreation} onChange={(e) => setCategorieCreation(e.target.value)}>
-                <option value="">Choisir…</option>
-                {groupes.map((g) => (
-                  <optgroup key={g} label={g}>
-                    {categories.filter((c) => c.groupe === g).map((c) => (
-                      <option key={c.id} value={c.id} disabled={c.bloque}>{c.libelle}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </label>
-
-            <label className={styles.champDialogue}>
-              <span>Justificatif (facultatif)</span>
-              <input
-                type="file"
-                accept="image/*,application/pdf"
-                onChange={async (e) => {
-                  const f = e.target.files?.[0];
-                  if (!f) { setPieceCreation(null); return; }
-                  const r = await compresser(f);
-                  setPieceCreation(r.fichier);
-                }}
-              />
-              {pieceCreation && (
-                <span className="muted" style={{ textTransform: 'none', letterSpacing: 0, fontFamily: 'var(--body)', fontWeight: 400 }}>
-                  {pieceCreation.name} · {poids(pieceCreation.size)}
-                </span>
-              )}
-            </label>
-
-            <div className={styles.actionsDialogue}>
-              <button onClick={() => { setACreer(null); setPieceCreation(null); }}
-                className="btn btn--ghost">Annuler</button>
-              <button
-                onClick={() => {
-                  const t = aCreer;
-                  const c = categorieCreation;
-                  const p = pieceCreation;
-                  setACreer(null);
-                  setPieceCreation(null);
-                  if (t && c) creerDepense(t, c, p);
-                }}
-                disabled={!categorieCreation || enCours}
-                className="btn btn--gold"
-              >
-                Créer en attente
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }
