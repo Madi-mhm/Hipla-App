@@ -3,6 +3,7 @@ import Header from '@/components/Header';
 import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
+import GestionCategories from './GestionCategories';
 import type { Categorie } from '@/lib/types';
 
 export const metadata = { title: 'Catégories — Hipla Gestion' };
@@ -14,66 +15,26 @@ export default async function Page() {
   if (!peut(profil.role, 'depenses', 'read')) redirect('/');
 
   const supabase = await createClient();
-  const { data } = await supabase.from('categories').select('*').order('ordre');
+  const [{ data }, { data: pieces }] = await Promise.all([
+    supabase.from('categories').select('*').order('ordre'),
+    supabase.from('pieces').select('categorie_id').not('categorie_id', 'is', null),
+  ]);
+
+  // Une catégorie utilisée par une pièce ne se supprime pas : elle
+  // s'archive, pour que l'export FEC garde son compte.
+  const usage: Record<string, number> = {};
+  for (const p of pieces ?? []) usage[p.categorie_id] = (usage[p.categorie_id] ?? 0) + 1;
+
   const categories = (data ?? []) as Categorie[];
-  const groupes = Array.from(new Set(categories.map((c) => c.groupe)));
 
   return (
     <>
-      <Header section="reglages" titre="Catégories" sousTitre={`${categories.length} catégories · plan comptable`} />
+      <Header section="reglages" titre="Catégories"
+        sousTitre={`${categories.filter((c) => c.actif).length} actives · plan comptable`} />
       <div className="content">
-        {groupes.map((g) => (
-          <div className="card" key={g} style={{ marginBottom: '1rem' }}>
-            <p className="card__title">{g}</p>
-            <div className="table-scroll">
-              <table style={{ minWidth: 560, fontSize: 'var(--fs-sm)' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--g-300)' }}>
-                    <th style={th}>Libellé</th>
-                    <th style={th}>Compte</th>
-                    <th style={{ ...th, textAlign: 'right' }}>TVA</th>
-                    <th style={{ ...th, textAlign: 'right' }}>Déduct.</th>
-                    <th style={{ ...th, textAlign: 'right' }}>Type</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {categories.filter((c) => c.groupe === g).map((c) => (
-                    <tr key={c.id} style={{ borderBottom: '1px solid var(--g-200)', opacity: c.bloque ? 0.55 : 1 }}>
-                      <td style={td}>
-                        {c.libelle}
-                        {c.bloque && <span className="badge badge--danger" style={{ marginLeft: '.4rem' }}>bloquée</span>}
-                        {c.avertissement && (
-                          <span className="muted" style={{ display: 'block', fontSize: 'var(--fs-xs)', marginTop: '.15rem' }}>
-                            {c.avertissement}
-                          </span>
-                        )}
-                      </td>
-                      <td style={td} className="mono">{c.compte}</td>
-                      <td style={{ ...td, textAlign: 'right' }}>{c.taux_tva_defaut} %</td>
-                      <td style={{ ...td, textAlign: 'right' }}>
-                        <span className={`badge ${c.taux_deductibilite === 100 ? 'badge--success' : c.taux_deductibilite === 80 ? 'badge--warning' : 'badge--neutral'}`}>
-                          {c.taux_deductibilite} %
-                        </span>
-                      </td>
-                      <td style={{ ...td, textAlign: 'right' }} className="muted">
-                        {c.type === 'immobilisation' ? `Immo · ${c.duree_amortissement} ans` : 'Charge'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ))}
-        <p className="muted" style={{ fontSize: 'var(--fs-xs)', maxWidth: '60ch' }}>
-          Une catégorie déjà utilisée ne peut pas être supprimée, seulement
-          archivée : les écritures passées doivent conserver leur rattachement
-          pour que l'export FEC reste cohérent.
-        </p>
+        <GestionCategories categories={categories} usage={usage}
+          peutGerer={peut(profil.role, 'depenses', 'update')} />
       </div>
     </>
   );
 }
-
-const th: React.CSSProperties = { textAlign: 'left', padding: '.5rem .4rem', color: 'var(--g-500)', fontWeight: 500, whiteSpace: 'nowrap' };
-const td: React.CSSProperties = { padding: '.6rem .4rem', verticalAlign: 'top' };
