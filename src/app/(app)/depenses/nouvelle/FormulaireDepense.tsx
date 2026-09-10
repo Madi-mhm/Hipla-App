@@ -22,27 +22,37 @@ import { money, montantSaisi } from '@/lib/format';
 import type { Categorie } from '@/lib/types';
 import Dialogue from '@/components/Dialogue';
 import Alerte from '@/components/Alerte';
+import { aujourdhuiIso } from '@/lib/dates';
 import styles from './formulaire.module.css';
 
-type Props = { categories: Categorie[]; peutValider: boolean };
+/** Valeurs reprises d'une dépense existante (bouton « Dupliquer »). */
+export type ValeursInitiales = {
+  fournisseur: string; libelle: string; categorieId: string;
+  montantTtc: number; tauxTva: number;
+  moyenPaiement: string; payePar: string; notes: string;
+};
 
-export default function FormulaireDepense({ categories, peutValider }: Props) {
+type Props = { categories: Categorie[]; peutValider: boolean; initial?: ValeursInitiales };
+
+export default function FormulaireDepense({ categories, peutValider, initial }: Props) {
   const router = useRouter();
 
-  const [dateDepense, setDateDepense] = useState(new Date().toISOString().slice(0, 10));
-  const [fournisseur, setFournisseur] = useState('');
-  const [libelle, setLibelle] = useState('');
-  const [categorieId, setCategorieId] = useState('');
+  // La date repart d'aujourd'hui, même pour une copie : c'est une nouvelle dépense.
+  const [dateDepense, setDateDepense] = useState(aujourdhuiIso);
+  const [fournisseur, setFournisseur] = useState(initial?.fournisseur ?? '');
+  const [libelle, setLibelle] = useState(initial?.libelle ?? '');
+  const [categorieId, setCategorieId] = useState(initial?.categorieId ?? '');
   const [saisieEn, setSaisieEn] = useState<'ht' | 'ttc'>('ttc');
-  const [montant, setMontant] = useState('');
-  const [tauxTva, setTauxTva] = useState(20);
-  const [moyenPaiement, setMoyenPaiement] = useState('carte');
-  const [payePar, setPayePar] = useState('societe');
+  const [montant, setMontant] = useState(
+    initial ? String(initial.montantTtc).replace('.', ',') : '');
+  const [tauxTva, setTauxTva] = useState(initial?.tauxTva ?? 20);
+  const [moyenPaiement, setMoyenPaiement] = useState(initial?.moyenPaiement ?? 'carte');
+  const [payePar, setPayePar] = useState(initial?.payePar ?? 'societe');
   // Les payeurs viennent de la base : deux associés étaient écrits en
   // dur ici, et un troisième n'aurait jamais pu apparaître.
   const [payeurs, setPayeurs] = useState<
     Array<{ valeur: string; libelle: string; avance: boolean }>>([]);
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState(initial?.notes ?? '');
   const [fichiers, setFichiers] = useState<File[]>([]);
   const [infoCompression, setInfoCompression] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);

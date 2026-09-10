@@ -61,7 +61,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   return (
     <>
-      <Header
+      <Header section="ventes"
         // Le numéro n'est attribué qu'à l'émission : un brouillon n'en a
         // pas, et ne doit pas en afficher un faux.
         titre={piece.numero_piece ?? 'Facture — brouillon'}

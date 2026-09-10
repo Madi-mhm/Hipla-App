@@ -100,7 +100,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   return (
     <>
-      <Header
+      <Header section="banque"
         titre={t.contrepartie ?? t.libelle}
         sousTitre={t.numero_piece ? `Opération ${t.numero_piece}` : 'Opération bancaire'}
       />

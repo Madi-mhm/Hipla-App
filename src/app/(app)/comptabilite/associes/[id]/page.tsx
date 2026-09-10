@@ -63,7 +63,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   return (
     <>
-      <Header
+      <Header section="comptabilite"
         titre={d.nom_complet}
         sousTitre={d.fonction ? FONCTIONS[d.fonction] ?? d.fonction : 'Associé'}
       />

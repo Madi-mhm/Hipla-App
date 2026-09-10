@@ -27,7 +27,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   return (
     <>
-      <Header
+      <Header section="ventes"
         titre={devis.numero_piece ?? 'Devis'}
         sousTitre={`${devis.tiers_libelle} · établi le ${dateLong(devis.date_piece)}`}
       />
