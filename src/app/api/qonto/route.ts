@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cronAutorise } from '@/lib/cron';
+import { dateParis } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -163,8 +164,10 @@ async function synchroniser(declencheur: 'cron' | 'manuel') {
 
           const ligne = {
             qonto_id: t.transaction_id,
-            date_operation: (t.settled_at ?? t.emitted_at).slice(0, 10),
-            date_valeur: t.settled_at ? t.settled_at.slice(0, 10) : null,
+            // Jour de Paris : l'horodatage Qonto est en UTC, un paiement
+            // passé entre minuit et 2 h tombait sur la veille.
+            date_operation: dateParis(t.settled_at ?? t.emitted_at),
+            date_valeur: t.settled_at ? dateParis(t.settled_at) : null,
             libelle: t.label,
             contrepartie: t.counterparty_name ?? null,
             reference: t.reference ?? null,

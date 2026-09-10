@@ -20,6 +20,7 @@ import { createClient } from '@/lib/supabase/client';
 import { compresser, poids } from '@/lib/compression';
 import { depuisTTC, tvaRecuperable, montantsCoherents, TAUX_TVA } from '@/lib/comptabilite';
 import { money, date, montantSaisi } from '@/lib/format';
+import { aujourdhuiIso } from '@/lib/dates';
 import Alerte from '@/components/Alerte';
 import type { Categorie } from '@/lib/types';
 import styles from './extraction.module.css';
@@ -163,18 +164,24 @@ export default function Extraction({
 
       const e = data.extrait as Extrait;
       const cat = trouverCategorie(e.categorie_suggeree, data.categorieMemorisee);
+      // Une facture en devise ne se comptabilise pas pour son montant
+      // facial : c'est le débit en euros, visible sur le relevé, qui compte.
+      const devise = (e.devise ?? 'EUR').toUpperCase();
+      const etrangere = devise !== 'EUR';
 
       setCoutSession((c) => c + (data.usage?.cout ?? 0));
       majDoc(doc.id, {
         etat: 'extrait',
-        erreur: undefined,
+        erreur: etrangere
+          ? `Facture en ${devise} (${e.montant_ttc ?? '?'} ${devise}) : saisissez le montant débité en euros, visible sur votre relevé.`
+          : undefined,
         extrait: e,
         coherent: data.coherent,
         doublons: data.doublons,
         fournisseur: e.fournisseur ?? '',
-        dateDepense: e.date ?? new Date().toISOString().slice(0, 10),
+        dateDepense: e.date ?? aujourdhuiIso(),
         categorieId: cat,
-        montantTtc: e.montant_ttc != null ? String(e.montant_ttc).replace('.', ',') : '',
+        montantTtc: !etrangere && e.montant_ttc != null ? String(e.montant_ttc).replace('.', ',') : '',
         tauxTva: e.taux_tva ?? 20,
         numeroFacture: e.numero_facture ?? '',
         description: e.description ?? '',

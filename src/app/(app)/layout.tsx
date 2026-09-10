@@ -22,6 +22,15 @@ export default async function LayoutApplication({
   // L'exercice couvrant aujourd'hui, pour le pied du menu. Il était écrit
   // en dur (« 2026–2027 ») et serait resté faux au second exercice.
   const supabase = await createClient();
+
+  // Double authentification activée mais code non saisi : retour à
+  // l'étape du code. La base refuse de son côté tout droit à une telle
+  // session ; ceci évite d'afficher des pages vides.
+  const { data: niveau } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (niveau && niveau.nextLevel === 'aal2' && niveau.currentLevel !== 'aal2') {
+    redirect('/connexion/code');
+  }
+
   const jour = aujourdhuiIso();
   const { data: ex } = await supabase.from('exercices')
     .select('date_debut, date_fin')

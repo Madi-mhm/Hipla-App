@@ -1,4 +1,5 @@
 'use client';
+import { isoLocal } from '@/lib/dates';
 
 /**
  * CONSTATATION DES INDEMNITÉS KILOMÉTRIQUES
@@ -42,13 +43,11 @@ export default function ConstaterKm({ etat, peutConstater }: {
   // Par défaut, le mois écoulé : c'est la périodicité qui convient à une
   // petite structure, assez fine pour suivre, assez large pour ne pas
   // fabriquer une écriture par semaine.
-  const finMoisDernier = new Date();
-  finMoisDernier.setDate(0);
+  const maintenant = new Date();
+  const finMoisDernier = new Date(maintenant.getFullYear(), maintenant.getMonth(), 0);
   const [debut, setDebut] = useState(
-    etat.premier ?? new Date(finMoisDernier.getFullYear(), finMoisDernier.getMonth(), 1)
-      .toISOString().slice(0, 10));
-  const [fin, setFin] = useState(
-    etat.dernier ?? finMoisDernier.toISOString().slice(0, 10));
+    etat.premier ?? isoLocal(new Date(finMoisDernier.getFullYear(), finMoisDernier.getMonth(), 1)));
+  const [fin, setFin] = useState(etat.dernier ?? isoLocal(finMoisDernier));
 
   async function constater() {
     setEnCours(true);

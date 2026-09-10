@@ -1,3 +1,4 @@
+import { aujourdhuiIso } from '@/lib/dates';
 /**
  * EXTRACTION D'UNE FACTURE PAR LE MODÈLE
  *
@@ -328,7 +329,7 @@ export async function POST(request: NextRequest) {
         p_fournisseur: extrait.fournisseur,
         p_numero: extrait.numero_facture ?? null,
         p_montant: ttc,
-        p_date: extrait.date ?? new Date().toISOString().slice(0, 10),
+        p_date: extrait.date ?? aujourdhuiIso(),
       });
       if (d && d.length > 0) doublons = d;
     }

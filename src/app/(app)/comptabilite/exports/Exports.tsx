@@ -1,4 +1,5 @@
 'use client';
+import { isoLocal } from '@/lib/dates';
 
 /**
  * Exports filtrés.
@@ -77,7 +78,7 @@ export default function Exports({
 
   const bornes = useMemo(() => {
     const now = new Date();
-    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    const iso = isoLocal;
 
     switch (periode) {
       case 'mois':

@@ -1,4 +1,5 @@
 'use client';
+import { aujourdhuiIso } from '@/lib/dates';
 
 /**
  * LE COFFRE
@@ -69,7 +70,7 @@ export default function Coffre({ documents, etat, peutDeposer }: {
   const [type, setType] = useState('statuts');
   const [libelle, setLibelle] = useState('');
   const [reference, setReference] = useState('');
-  const [dateDocument, setDateDocument] = useState(new Date().toISOString().slice(0, 10));
+  const [dateDocument, setDateDocument] = useState(aujourdhuiIso);
   const [dateExpiration, setDateExpiration] = useState('');
   const [remplace, setRemplace] = useState('');
 

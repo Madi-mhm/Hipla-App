@@ -1,3 +1,4 @@
+import { aujourdhuiIso } from '@/lib/dates';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import Header from '@/components/Header';
@@ -15,7 +16,7 @@ export default async function Page() {
   if (!peut(profil.role, 'tva', 'read')) redirect('/');
 
   const supabase = await createClient();
-  const aujourdhui = new Date().toISOString().slice(0, 10);
+  const aujourdhui = aujourdhuiIso();
 
   const [{ data: declarations }, { data: exercice }] = await Promise.all([
     supabase.from('declarations_tva').select('*')

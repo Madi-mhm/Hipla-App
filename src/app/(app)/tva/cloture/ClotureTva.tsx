@@ -18,6 +18,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { money, date, dateLong } from '@/lib/format';
+import { isoLocal } from '@/lib/dates';
 import Alerte from '@/components/Alerte';
 import Dialogue from '@/components/Dialogue';
 
@@ -53,17 +54,16 @@ export default function ClotureTva({
   const [ecarts, setEcarts] = useState<Record<string, Ecart>>({});
 
   // Par défaut, le mois écoulé : on ne clôture jamais une période en
-  // cours, des écritures peuvent encore y entrer.
-  const finMoisDernier = new Date();
-  finMoisDernier.setDate(0);
-  const debutMoisDernier = new Date(
-    finMoisDernier.getFullYear(), finMoisDernier.getMonth(), 1);
+  // cours, des écritures peuvent encore y entrer. Dates locales : la
+  // conversion UTC d'un minuit local faisait commencer la période la veille.
+  const maintenant = new Date();
+  const finMoisDernier = new Date(maintenant.getFullYear(), maintenant.getMonth(), 0);
+  const debutMoisDernier = isoLocal(
+    new Date(finMoisDernier.getFullYear(), finMoisDernier.getMonth(), 1));
 
   const [debut, setDebut] = useState(
-    debutMoisDernier > new Date(exerciceDebut)
-      ? debutMoisDernier.toISOString().slice(0, 10)
-      : exerciceDebut);
-  const [fin, setFin] = useState(finMoisDernier.toISOString().slice(0, 10));
+    debutMoisDernier > exerciceDebut ? debutMoisDernier : exerciceDebut);
+  const [fin, setFin] = useState(isoLocal(finMoisDernier));
   const [reference, setReference] = useState('');
   const [deposeLe, setDeposeLe] = useState('');
 
@@ -81,12 +81,14 @@ export default function ClotureTva({
 
     if (error) { setErreur(error.message); setEnCours(false); return; }
 
-    const r = data as { formulaire?: string; solde?: number; faits_generateurs?: number } | null;
+    const r = data as {
+      formulaire?: string; solde?: number; collectee?: number; deductible?: number;
+    } | null;
+    const solde = Number(r?.solde ?? 0);
     setSucces(
-      `${r?.formulaire ?? 'Déclaration'} figée — solde de `
-      + `${money(Math.abs(Number(r?.solde ?? 0)))} sur `
-      + `${r?.faits_generateurs} fait${(r?.faits_generateurs ?? 0) > 1 ? 's' : ''} générateur`
-      + `${(r?.faits_generateurs ?? 0) > 1 ? 's' : ''}.`
+      `${r?.formulaire ?? 'Déclaration'} figée — TVA collectée `
+      + `${money(Number(r?.collectee ?? 0))}, déductible ${money(Number(r?.deductible ?? 0))} : `
+      + `${money(Math.abs(solde))} ${solde >= 0 ? 'à payer' : 'de crédit'}.`
     );
     setEnCours(false);
     router.refresh();
@@ -198,8 +200,6 @@ export default function ClotureTva({
                           ? `Déposée le ${date(d.depose_le)}`
                           : 'Préparée, non déposée'}
                         {d.reference && ` · ${d.reference}`}
-                        {' · '}{d.detail.length} fait{d.detail.length > 1 ? 's' : ''} générateur
-                        {d.detail.length > 1 ? 's' : ''}
                       </p>
                       {annulee && d.motif_annulation && (
                         <p style={{

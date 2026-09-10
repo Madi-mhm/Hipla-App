@@ -1,3 +1,4 @@
+import { aujourdhuiIso } from '@/lib/dates';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Fragment } from 'react';
@@ -50,7 +51,7 @@ export default async function Page() {
   // L'exercice en cours — pas le plus récent : les exercices à venir
   // sont déjà déclarés, et viser le dernier interrogerait une période
   // où rien n'existe.
-  const aujourdhui = new Date().toISOString().slice(0, 10);
+  const aujourdhui = aujourdhuiIso();
   const { data: exercice } = await supabase
     .from('exercices').select('date_debut, date_fin, regime_tva')
     .lte('date_debut', aujourdhui).gte('date_fin', aujourdhui)

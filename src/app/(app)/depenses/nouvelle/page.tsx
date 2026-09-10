@@ -5,7 +5,7 @@ import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import ChoixSaisie from './ChoixSaisie';
 import Extraction from './Extraction';
-import FormulaireDepense, { type ValeursInitiales } from './FormulaireDepense';
+import FormulaireDepense, { type ValeursInitiales, type FournisseurConnu } from './FormulaireDepense';
 import type { Categorie } from '@/lib/types';
 
 export const metadata = { title: 'Nouvelle dépense — Hipla Gestion' };
@@ -30,7 +30,7 @@ export default async function Page({ searchParams }: {
 
   const { mode, depuis } = await searchParams;
   const supabase = await createClient();
-  const [{ data: cats }, { data: usage }, { data: source }] = await Promise.all([
+  const [{ data: cats }, { data: usage }, { data: source }, { data: fourn }] = await Promise.all([
     supabase.from('categories').select('*').eq('actif', true).order('ordre'),
     supabase.rpc('usage_ia_du_mois'),
     depuis
@@ -38,6 +38,8 @@ export default async function Page({ searchParams }: {
           .select('numero_piece, nature, tiers_libelle, objet, categorie_id, montant_ttc, taux_tva, moyen_paiement, paye_par, notes')
           .eq('id', depuis).in('nature', ['achat', 'creation']).maybeSingle()
       : Promise.resolve({ data: null }),
+    supabase.from('tiers').select('nom, pays_code')
+      .eq('est_fournisseur', true).eq('actif', true).order('nom'),
   ]);
 
   const categories = (cats ?? []) as Categorie[];
@@ -69,7 +71,8 @@ export default async function Page({ searchParams }: {
               utilisateurId={profil.id} peutValider={peutValider} />
           }
           manuel={
-            <FormulaireDepense categories={categories} peutValider={peutValider} initial={initial} />
+            <FormulaireDepense categories={categories} peutValider={peutValider} initial={initial}
+              fournisseurs={(fourn ?? []) as FournisseurConnu[]} />
           }
         />
       </div>

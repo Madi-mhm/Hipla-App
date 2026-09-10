@@ -1,3 +1,4 @@
+import { aujourdhuiIso } from '@/lib/dates';
 /**
  * EXPORT DU FICHIER DES ÉCRITURES COMPTABLES
  *
@@ -72,7 +73,7 @@ export async function GET(requete: NextRequest) {
     // L'exercice EN COURS, pas le plus récent : les exercices à venir
     // sont déjà déclarés en base, et viser le dernier revenait à
     // interroger une période où rien n'existe encore.
-    const aujourdhui = new Date().toISOString().slice(0, 10);
+    const aujourdhui = aujourdhuiIso();
 
     const { data: courant } = await supabase
       .from('exercices').select('date_debut, date_fin')

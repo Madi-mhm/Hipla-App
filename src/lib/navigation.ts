@@ -91,6 +91,7 @@ export const SECTIONS: Section[] = [
     cle: 'reglages', libelle: 'Réglages', href: '/reglages/entreprise',
     droit: { module: 'entreprise' },
     onglets: [
+      { href: '/reglages/compte', libelle: 'Mon compte' },
       { href: '/reglages/entreprise', libelle: 'Entreprise' },
       { href: '/reglages/utilisateurs', libelle: 'Utilisateurs',
         droit: { module: 'utilisateurs' } },

@@ -1,4 +1,5 @@
 'use client';
+import { aujourdhuiIso } from '@/lib/dates';
 
 /**
  * DÉTAIL D'UNE VENTE
@@ -110,7 +111,7 @@ export default function DetailFacture({
   const [periodeFin, setPeriodeFin] = useState(piece.periode_fin ?? '');
 
   // Règlement
-  const [dateReglement, setDateReglement] = useState(new Date().toISOString().slice(0, 10));
+  const [dateReglement, setDateReglement] = useState(aujourdhuiIso);
   const [montantRegle, setMontantRegle] = useState('');
   const [moyenReglement, setMoyenReglement] = useState('virement');
   const [transactionChoisie, setTransactionChoisie] = useState('');

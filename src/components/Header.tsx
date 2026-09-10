@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import styles from './Header.module.css';
 import { profilCourant } from '@/lib/auth';
 import { LIBELLE_ROLE } from '@/lib/permissions';
@@ -35,10 +36,11 @@ export default async function Header({ titre, sousTitre, section }: Props) {
         <div className={styles.actions}>
           {profil ? (
             <>
-              <div className={styles.utilisateur}>
+              <Link href="/reglages/compte" className={styles.utilisateur}
+                style={{ textDecoration: 'none' }} title="Mon compte">
                 <span className={styles.nom}>{profil.nom_complet}</span>
                 <span className={styles.role}>{LIBELLE_ROLE[profil.role]}</span>
-              </div>
+              </Link>
               <BoutonDeconnexion />
             </>
           ) : (

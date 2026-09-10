@@ -1,3 +1,4 @@
+import { aujourdhuiIso } from '@/lib/dates';
 import { redirect } from 'next/navigation';
 import Header from '@/components/Header';
 import { createClient } from '@/lib/supabase/server';
@@ -14,7 +15,7 @@ export default async function Page() {
   if (!peut(profil.role, 'exports', 'read')) redirect('/');
 
   const supabase = await createClient();
-  const aujourdhui = new Date().toISOString().slice(0, 10);
+  const aujourdhui = aujourdhuiIso();
 
   const { data: exercice } = await supabase.from('exercices')
     .select('date_debut, date_fin')

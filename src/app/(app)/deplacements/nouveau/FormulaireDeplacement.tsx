@@ -1,4 +1,5 @@
 'use client';
+import { aujourdhuiIso } from '@/lib/dates';
 
 /**
  * SAISIE D'UN DÉPLACEMENT
@@ -66,7 +67,7 @@ export default function FormulaireDeplacement({
   vehicules, peutValider, lieux, motifs, bareme, cumulAnnuel, reprise,
 }: Props) {
   const router = useRouter();
-  const [dateTrajet, setDateTrajet] = useState(new Date().toISOString().slice(0, 10));
+  const [dateTrajet, setDateTrajet] = useState(aujourdhuiIso);
   const [vehiculeId, setVehiculeId] = useState(
     reprise?.vehicule_id ?? vehicules[0]?.id ?? '');
   /* Un trajet peut arriver pré-rempli depuis un précédent : même client,

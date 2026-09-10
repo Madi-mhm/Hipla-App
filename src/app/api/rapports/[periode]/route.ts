@@ -1,3 +1,4 @@
+import { isoLocal } from '@/lib/dates';
 /**
  * TÉLÉCHARGEMENT D'UN RAPPORT MENSUEL
  *
@@ -29,7 +30,7 @@ export async function GET(
   const [an, mois] = periode.split('-').map(Number);
   const debut = `${periode}-01`;
   // Le zéro du mois suivant donne le dernier jour du mois courant.
-  const fin = new Date(an, mois, 0).toISOString().slice(0, 10);
+  const fin = isoLocal(new Date(an, mois, 0));
 
   const supabase = await createClient();
 

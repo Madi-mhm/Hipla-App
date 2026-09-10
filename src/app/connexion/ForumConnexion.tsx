@@ -5,6 +5,12 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import styles from './connexion.module.css';
 
+/** Seul un chemin interne est suivi : « //site », « /\site » ou
+    « https://… » mèneraient hors de l'application après la connexion. */
+export function destinationSure(suite: string | null): string {
+  return suite && suite.startsWith('/') && !/^\/[\/\\]/.test(suite) ? suite : '/';
+}
+
 export default function ForumConnexion() {
   const router = useRouter();
   const params = useSearchParams();
@@ -31,17 +37,21 @@ export default function ForumConnexion() {
       return;
     }
 
+    const suite = destinationSure(params.get('suite'));
+
+    // Double authentification activée : le mot de passe ne suffit pas,
+    // le code à six chiffres est demandé avant d'entrer.
+    const { data: niveau } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (niveau && niveau.nextLevel === 'aal2' && niveau.currentLevel !== 'aal2') {
+      router.push(`/connexion/code?suite=${encodeURIComponent(suite)}`);
+      return;
+    }
+
     await supabase.rpc('journaliser', {
-      p_action: 'connexion',
-      p_table: null,
-      p_id: null,
-      p_details: null,
+      p_action: 'connexion', p_table: null, p_id: null, p_details: null,
     });
 
-    // Seul un chemin interne est suivi : « //site », « /\site » ou
-    // « https://… » mèneraient hors de l'application après la connexion.
-    const suite = params.get('suite');
-    router.push(suite && suite.startsWith('/') && !/^\/[\/\\]/.test(suite) ? suite : '/');
+    router.push(suite);
     router.refresh();
   }
 

@@ -16,7 +16,7 @@ import { createClient } from '@/lib/supabase/client';
 import { compresser, poids } from '@/lib/compression';
 import {
   TAUX_TVA, depuisHT, depuisTTC, tvaRecuperable,
-  montantsCoherents, SEUIL_IMMOBILISATION,
+  montantsCoherents, SEUIL_IMMOBILISATION, centimes,
 } from '@/lib/comptabilite';
 import { money, montantSaisi } from '@/lib/format';
 import type { Categorie } from '@/lib/types';
@@ -32,9 +32,15 @@ export type ValeursInitiales = {
   moyenPaiement: string; payePar: string; notes: string;
 };
 
-type Props = { categories: Categorie[]; peutValider: boolean; initial?: ValeursInitiales };
+/** Fournisseurs déjà connus : suggérés à la saisie pour ne pas créer de doublon. */
+export type FournisseurConnu = { nom: string; pays_code: string | null };
 
-export default function FormulaireDepense({ categories, peutValider, initial }: Props) {
+type Props = {
+  categories: Categorie[]; peutValider: boolean; initial?: ValeursInitiales;
+  fournisseurs?: FournisseurConnu[];
+};
+
+export default function FormulaireDepense({ categories, peutValider, initial, fournisseurs = [] }: Props) {
   const router = useRouter();
 
   // La date repart d'aujourd'hui, même pour une copie : c'est une nouvelle dépense.
@@ -53,6 +59,10 @@ export default function FormulaireDepense({ categories, peutValider, initial }: 
   const [payeurs, setPayeurs] = useState<
     Array<{ valeur: string; libelle: string; avance: boolean }>>([]);
   const [notes, setNotes] = useState(initial?.notes ?? '');
+  // Ticket à plusieurs taux (5,5 % et 20 % au supermarché) : on saisit le
+  // total TTC et le total de TVA imprimés, le HT s'en déduit.
+  const [multiTaux, setMultiTaux] = useState(false);
+  const [tvaTicket, setTvaTicket] = useState('');
   const [fichiers, setFichiers] = useState<File[]>([]);
   const [infoCompression, setInfoCompression] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -77,8 +87,24 @@ export default function FormulaireDepense({ categories, peutValider, initial }: 
   const montants = useMemo(() => {
     const v = (montantSaisi(montant) ?? NaN);
     if (!Number.isFinite(v) || v < 0) return null;
+    if (multiTaux) {
+      const t = montantSaisi(tvaTicket) ?? NaN;
+      if (!Number.isFinite(t) || t < 0 || t >= v) return null;
+      return { ht: centimes(v - t), tva: centimes(t), ttc: centimes(v) };
+    }
     return saisieEn === 'ht' ? depuisHT(v, tauxTva) : depuisTTC(v, tauxTva);
-  }, [montant, tauxTva, saisieEn]);
+  }, [montant, tauxTva, saisieEn, multiTaux, tvaTicket]);
+
+  /* La base recalcule le HT à partir d'un taux. Pour un ticket à plusieurs
+     taux, on lui transmet le taux moyen qui redonne exactement la TVA
+     imprimée sur le ticket. */
+  const tauxEnvoye = multiTaux && montants && montants.ht > 0
+    ? (montants.tva / montants.ht) * 100
+    : tauxTva;
+
+  const fournisseurConnu = fournisseurs.find(
+    (x) => x.nom.toLowerCase() === fournisseur.trim().toLowerCase());
+  const fournisseurEtranger = !!fournisseurConnu?.pays_code && fournisseurConnu.pays_code !== 'FR';
 
   const tvaRec = montants && categorie
     ? tvaRecuperable(montants.tva, categorie.taux_deductibilite)
@@ -159,7 +185,7 @@ export default function FormulaireDepense({ categories, peutValider, initial }: 
       p_fournisseur: fournisseur.trim(),
       p_categorie: categorie.id,
       p_montant_ttc: montants.ttc,
-      p_taux_tva: tauxTva,
+      p_taux_tva: tauxEnvoye,
       p_libelle: libelle.trim() || null,
       p_statut: peutValider ? 'validee' : 'en_attente',
       p_origine: 'saisie',
@@ -244,7 +270,16 @@ export default function FormulaireDepense({ categories, peutValider, initial }: 
 
           <label className={styles.champ}>
             <span>Fournisseur *</span>
-            <input type="text" value={fournisseur} onChange={(e) => setFournisseur(e.target.value)} required placeholder="Leclerc, Total, Orange…" />
+            <input type="text" value={fournisseur} onChange={(e) => setFournisseur(e.target.value)} required placeholder="Leclerc, Total, Orange…" list="fournisseurs-connus" />
+            <datalist id="fournisseurs-connus">
+              {fournisseurs.map((x) => <option key={x.nom} value={x.nom} />)}
+            </datalist>
+            {fournisseurEtranger && (
+              <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.3rem' }}>
+                Fournisseur hors de France ({fournisseurConnu?.pays_code}) : si la facture
+                ne porte pas de TVA, choisissez 0 % — la TVA sera autoliquidée.
+              </p>
+            )}
           </label>
 
           <label className={`${styles.champ} ${styles.pleine}`}>
@@ -283,10 +318,17 @@ export default function FormulaireDepense({ categories, peutValider, initial }: 
           <button type="button" onClick={() => setSaisieEn('ttc')} className={saisieEn === 'ttc' ? styles.basculeActif : ''}>
             Je saisis le TTC
           </button>
-          <button type="button" onClick={() => setSaisieEn('ht')} className={saisieEn === 'ht' ? styles.basculeActif : ''}>
+          <button type="button" onClick={() => setSaisieEn('ht')} disabled={multiTaux}
+            className={saisieEn === 'ht' ? styles.basculeActif : ''}>
             Je saisis le HT
           </button>
         </div>
+
+        <label style={{ display: 'flex', gap: '.5rem', alignItems: 'center', fontSize: 'var(--fs-sm)', margin: '.2rem 0 .8rem' }}>
+          <input type="checkbox" checked={multiTaux}
+            onChange={(e) => { setMultiTaux(e.target.checked); if (e.target.checked) setSaisieEn('ttc'); }} />
+          Ce ticket comporte plusieurs taux de TVA (par exemple 5,5 % et 20 %)
+        </label>
 
         <div className={styles.grille}>
           <label className={styles.champ}>
@@ -294,14 +336,22 @@ export default function FormulaireDepense({ categories, peutValider, initial }: 
             <input type="text" inputMode="decimal" value={montant} onChange={(e) => setMontant(e.target.value)} required placeholder="120,00" />
           </label>
 
-          <label className={styles.champ}>
-            <span>Taux de TVA</span>
-            <select value={tauxTva} onChange={(e) => setTauxTva(Number(e.target.value))}>
-              {TAUX_TVA.map((t) => (
-                <option key={t.valeur} value={t.valeur}>{t.libelle}</option>
-              ))}
-            </select>
-          </label>
+          {multiTaux ? (
+            <label className={styles.champ}>
+              <span>TVA totale du ticket *</span>
+              <input type="text" inputMode="decimal" value={tvaTicket}
+                onChange={(e) => setTvaTicket(e.target.value)} required placeholder="4,82" />
+            </label>
+          ) : (
+            <label className={styles.champ}>
+              <span>Taux de TVA</span>
+              <select value={tauxTva} onChange={(e) => setTauxTva(Number(e.target.value))}>
+                {TAUX_TVA.map((t) => (
+                  <option key={t.valeur} value={t.valeur}>{t.libelle}</option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
 
         {montants && (

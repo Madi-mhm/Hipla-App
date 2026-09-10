@@ -248,6 +248,9 @@ export default function JustificatifsQonto({ lignes, categories, peutValider }: 
         const corr = l.correspondance;
         const aCorrespondance = corr?.resultat === 'correspondance_forte'
           || corr?.resultat === 'correspondance_probable';
+        // Plusieurs dépenses possibles : créer une écriture de plus
+        // compterait l'achat deux fois. On fait choisir sur l'opération.
+        const plusieurs = corr?.resultat === 'plusieurs';
 
         return (
           <div key={l.id} className="card" style={{ marginBottom: '1.25rem' }}>
@@ -308,8 +311,21 @@ export default function JustificatifsQonto({ lignes, categories, peutValider }: 
                   </div>
                 )}
 
+                {plusieurs && e.phase !== 'traite' && (
+                  <div className={styles.correspondance}>
+                    <p><strong>Plusieurs dépenses pourraient correspondre</strong></p>
+                    <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: '.4rem', lineHeight: 1.5 }}>
+                      Ouvrez l&apos;opération pour choisir la bonne : en créer une
+                      nouvelle compterait le même achat deux fois.
+                    </p>
+                    <div className={styles.actions}>
+                      <Link href={`/banque/${l.id}`} className="btn btn--gold">Ouvrir l&apos;opération</Link>
+                    </div>
+                  </div>
+                )}
+
                 {/* Aucune écriture : extraction puis création */}
-                {!aCorrespondance && e.phase === 'repos' && (
+                {!aCorrespondance && !plusieurs && e.phase === 'repos' && (
                   <div className={styles.centre}>
                     <p className="muted" style={{ fontSize: 'var(--fs-sm)', lineHeight: 1.55 }}>
                       Aucune dépense ne correspond à cette opération. Lisez le
