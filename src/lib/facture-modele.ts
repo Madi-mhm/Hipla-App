@@ -107,6 +107,9 @@ export type ModeleFacture = {
 
   encaisseLe: string | null;
   montantEncaisse: number;
+
+  /** Pour un avoir : la facture qu'il corrige (mention obligatoire). */
+  factureCorrigee: { numero: string; date: string } | null;
 };
 
 /* ------------------------------------------------------------------ */

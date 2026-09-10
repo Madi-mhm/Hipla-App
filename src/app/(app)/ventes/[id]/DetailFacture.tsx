@@ -117,6 +117,7 @@ export default function DetailFacture({
 
   const statut = statutVente(piece);
   const [devisChoisi, setDevisChoisi] = useState('');
+  const [dialogueSuppression, setDialogueSuppression] = useState(false);
 
   async function rattacherDevis() {
     if (!devisChoisi) return;
@@ -266,9 +267,11 @@ export default function DetailFacture({
     }
 
     const numero = (data as { numero_piece?: string } | null)?.numero_piece;
-    setSucces(
-      `Facture ${numero ?? ''} émise. Elle est désormais figée : son numéro `
-      + 'et ses mentions ne changeront plus.'
+    setSucces(nature === 'avoir'
+      ? `Avoir ${numero ?? ''} émis. Il est imputé sur la facture qu’il corrige ; `
+        + 'ce qui dépasse le reste dû est à rembourser au client.'
+      : `Facture ${numero ?? ''} émise. Elle est désormais figée : son numéro `
+        + 'et ses mentions ne changeront plus.'
     );
     setEnCours(false);
     router.refresh();
@@ -308,21 +311,32 @@ export default function DetailFacture({
     router.refresh();
   }
 
-  async function annuler(motif: string) {
+  /* Une facture émise ne s'annule plus : elle se corrige par un avoir,
+     préparé avec les mêmes lignes. On ajuste les lignes pour un avoir
+     partiel, puis on l'émet. */
+  async function etablirAvoir(motif: string) {
     setEnCours(true);
     setErreur(null);
     const supabase = createClient();
-
-    // La fonction libère aussi les opérations bancaires rattachées :
-    // une charge ne doit pas sortir du contrôle de complétude sans être
-    // comptabilisée quelque part.
-    const { error } = await supabase.rpc('annuler_piece', {
-      p_id: piece.id, p_motif: motif,
+    const { data, error } = await supabase.rpc('creer_avoir_vente', {
+      p_facture: piece.id, p_motif: motif || null,
     });
+    if (error || !data) {
+      setErreur(`Avoir impossible — ${error?.message ?? 'erreur inconnue'}`);
+      setEnCours(false);
+      return;
+    }
+    router.push(`/ventes/${(data as { id: string }).id}`);
+  }
 
-    if (error) { setErreur(`Annulation impossible — ${error.message}`); setEnCours(false); return; }
-    setEnCours(false);
-    router.refresh();
+  /* Un brouillon n'a jamais eu de numéro : il se supprime. */
+  async function supprimerBrouillon() {
+    setEnCours(true);
+    setErreur(null);
+    const supabase = createClient();
+    const { error } = await supabase.rpc('supprimer_brouillon', { p_id: piece.id });
+    if (error) { setErreur(`Suppression impossible — ${error.message}`); setEnCours(false); return; }
+    router.push('/ventes');
   }
 
   const groupes = Array.from(new Set(prestations.map((p) => p.groupe)));
@@ -376,7 +390,7 @@ export default function DetailFacture({
             {peutGerer && modifiable && (
               <button onClick={emettre} disabled={enCours || obstacles.length > 0}
                 className="btn btn--gold">
-                Émettre la facture
+                {nature === 'avoir' ? 'Émettre l’avoir' : 'Émettre la facture'}
               </button>
             )}
             {lignes.length > 0 && (
@@ -405,13 +419,19 @@ export default function DetailFacture({
                 setMontantRegle(String(resteAPayer.toFixed(2)).replace('.', ','));
                 setDialogueEncaissement(true);
               }} className="btn btn--gold">
-                Enregistrer un règlement
+                {nature === 'avoir' ? 'Enregistrer le remboursement' : 'Enregistrer un règlement'}
               </button>
             )}
-            {peutGerer && piece.etat !== 'annulee' && (
+            {peutGerer && piece.etat === 'validee' && nature !== 'avoir' && (
               <button onClick={() => setDialogueAnnulation(true)} disabled={enCours}
                 className="btn btn--ghost" style={{ color: 'var(--danger)' }}>
-                Annuler
+                Établir un avoir
+              </button>
+            )}
+            {peutGerer && modifiable && (
+              <button onClick={() => setDialogueSuppression(true)} disabled={enCours}
+                className="btn btn--ghost" style={{ color: 'var(--danger)' }}>
+                Supprimer le brouillon
               </button>
             )}
           </div>
@@ -679,7 +699,7 @@ export default function DetailFacture({
               <strong className="amount">− {money(Number(piece.acomptes_deduits))}</strong></div>
           )}
           <div className={styles.totalFinal}>
-            <span>Net à payer</span>
+            <span>{nature === 'avoir' ? 'Montant de l’avoir' : 'Net à payer'}</span>
             <strong className="amount">{money(Number(piece.net_a_payer))}</strong>
           </div>
         </div>
@@ -846,16 +866,25 @@ export default function DetailFacture({
 
       <Dialogue
         ouvert={dialogueAnnulation}
-        titre="Annuler cette facture"
+        titre="Établir un avoir"
         description={
-          "La facture conserve son numéro et reste consultable, mais sort des " +
-          "totaux, et les opérations bancaires rattachées sont libérées. La " +
-          "numérotation doit rester continue : une facture n'est jamais " +
-          "effacée. Si elle a déjà été envoyée au client, émettez plutôt un avoir."
+          "Une facture émise ne s'efface pas : elle se corrige par un avoir. " +
+          "L'avoir est préparé avec les mêmes lignes — retirez-en ou corrigez-" +
+          "les pour un avoir partiel — puis émettez-le. Il éteint ce qui reste " +
+          "dû sur cette facture ; le surplus éventuel est à rembourser au client."
         }
-        champ="Motif" obligatoire libelleValider="Annuler la facture" danger
-        onValider={(m) => { setDialogueAnnulation(false); annuler(m); }}
+        champ="Motif (facultatif)" libelleValider="Préparer l’avoir"
+        onValider={(m) => { setDialogueAnnulation(false); etablirAvoir(m ?? ''); }}
         onAnnuler={() => setDialogueAnnulation(false)}
+      />
+
+      <Dialogue
+        ouvert={dialogueSuppression}
+        titre="Supprimer ce brouillon"
+        description="Il n'a jamais été émis ni numéroté : il disparaît sans laisser de trou dans la numérotation."
+        libelleValider="Supprimer" danger
+        onValider={() => { setDialogueSuppression(false); supprimerBrouillon(); }}
+        onAnnuler={() => setDialogueSuppression(false)}
       />
     </>
   );

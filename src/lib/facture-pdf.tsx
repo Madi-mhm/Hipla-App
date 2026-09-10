@@ -150,7 +150,8 @@ const s = StyleSheet.create({
 export function documentFacture(m: ModeleFacture) {
   const e = m.emetteur;
   const d = m.destinataire;
-  const soldee = m.montantEncaisse >= m.netAPayer && m.netAPayer > 0;
+  const estAvoir = m.nature === 'avoir';
+  const soldee = !estAvoir && m.montantEncaisse >= m.netAPayer && m.netAPayer > 0;
   /* Un devis n'appelle aucun paiement : ni échéance, ni délai, ni
      coordonnées bancaires. Ce qu'il annonce, c'est jusqu'à quand le prix
      tient. */
@@ -291,7 +292,7 @@ export function documentFacture(m: ModeleFacture) {
 
             <View style={s.ligneTotalFort}>
               <Text style={s.netLibelle}>
-                {estDevis ? 'TOTAL DU DEVIS' : 'NET À PAYER'}
+                {estDevis ? 'TOTAL DU DEVIS' : estAvoir ? 'MONTANT DE L’AVOIR' : 'NET À PAYER'}
               </Text>
               <Text style={s.netValeur}>{eur(m.netAPayer)}</Text>
             </View>
@@ -312,6 +313,19 @@ export function documentFacture(m: ModeleFacture) {
             <Text style={{ color: GRIS, marginTop: 10 }}>
               Ce devis est établi sans engagement de votre part. Passé le
               {' '}{dateFr(m.dateEcheance)}, les prix indiqués ne sont plus garantis.
+            </Text>
+          </View>
+        ) : estAvoir ? (
+          <View style={s.reglement} wrap={false}>
+            <Text style={s.blocTitre}>Avoir</Text>
+            <Text style={{ marginTop: 4 }}>
+              {m.factureCorrigee
+                ? `Avoir sur la facture ${m.factureCorrigee.numero} du ${dateFr(m.factureCorrigee.date)}.`
+                : 'Avoir sur facture.'}
+            </Text>
+            <Text style={{ color: GRIS, marginTop: 4 }}>
+              Ce montant vient en déduction de la facture corrigée. S&apos;il
+              excède ce qui restait dû, la différence vous est remboursée.
             </Text>
           </View>
         ) : (

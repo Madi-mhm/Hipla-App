@@ -160,6 +160,14 @@ export async function chargerModeleFacture(id: string): Promise<Resultat> {
   const acomptes = centimes(Number(piece.acomptes_deduits ?? 0));
   const totalTtc = centimes(Number(piece.montant_ttc ?? 0));
 
+  // Un avoir cite la facture qu'il corrige : numéro et date.
+  let factureCorrigee: { numero: string; date: string } | null = null;
+  if (piece.nature === 'avoir' && piece.piece_liee_id) {
+    const { data: f } = await supabase.from('pieces')
+      .select('numero_piece, date_piece').eq('id', piece.piece_liee_id).maybeSingle();
+    if (f?.numero_piece) factureCorrigee = { numero: String(f.numero_piece), date: String(f.date_piece) };
+  }
+
   const modele: ModeleFacture = {
     numero: piece.numero_piece ? String(piece.numero_piece) : null,
     // Un avoir garde son intitulé propre ; l'acompte et le solde se
@@ -209,6 +217,8 @@ export async function chargerModeleFacture(id: string): Promise<Resultat> {
 
     encaisseLe: piece.paye_le ? String(piece.paye_le) : null,
     montantEncaisse: centimes(Number(piece.montant_regle ?? 0)),
+
+    factureCorrigee,
   };
 
   // Dernier verrou : mieux vaut aucun document qu'un document dont les
