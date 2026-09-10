@@ -1,6 +1,6 @@
 -- ============================================================
 -- SCHÉMA COMPLET DE LA BASE — exporté de la base de production
--- le 2026-09-10T19:10:49.846Z (lecture seule). Ne pas modifier à la main :
+-- le 2026-09-10T20:00:30.822Z (lecture seule). Ne pas modifier à la main :
 -- ce fichier se régénère. Les changements passent par supabase/migrations.
 -- ============================================================
 set check_function_bodies = off;
@@ -1272,6 +1272,71 @@ begin
 
   return jsonb_build_object('id', p_id, 'etat', 'annulee',
                             'operations_liberees', v_liberees);
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.annuler_trajet(p_id uuid, p_motif text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  d       public.deplacements%rowtype;
+  v_piece text;
+begin
+  if auth.uid() is not null and not public.a_permission('depenses','validate') then
+    raise exception 'Permission insuffisante';
+  end if;
+
+  select * into d from public.deplacements where id = p_id for update;
+  if not found then raise exception 'Trajet introuvable'; end if;
+  if d.statut = 'annulee' then raise exception 'Ce trajet est déjà annulé'; end if;
+  if d.statut <> 'validee' then
+    raise exception 'Seul un trajet validé s''annule ; un trajet en attente se rejette.';
+  end if;
+  if trim(coalesce(p_motif, '')) = '' then
+    raise exception 'Un motif d''annulation est obligatoire';
+  end if;
+
+  -- Déjà indemnisé : l'écriture d'indemnités couvre sa date.
+  select numero_piece into v_piece from public.pieces
+  where  nature = 'km' and etat <> 'annulee'
+    and  periode_debut <= d.date_trajet and periode_fin >= d.date_trajet
+  limit  1;
+  if found then
+    raise exception
+      'Ce trajet est déjà indemnisé par l''écriture %. Annulez d''abord cette '
+      'écriture (Dépenses), puis le trajet.', v_piece;
+  end if;
+
+  -- Une indemnité constatée plus tard dans l'année l'a compté dans son
+  -- cumul : le retirer fausserait sa tranche du barème.
+  select numero_piece into v_piece from public.pieces
+  where  nature = 'km' and etat <> 'annulee'
+    and  periode_fin > d.date_trajet
+    and  extract(year from periode_fin) = extract(year from d.date_trajet)
+  order  by periode_fin
+  limit  1;
+  if found then
+    raise exception
+      'L''écriture %, constatée après ce trajet, l''a compté dans le cumul annuel. '
+      'Annulez-la d''abord, puis le trajet.', v_piece;
+  end if;
+
+  update public.deplacements
+  set    statut = 'annulee', motif_annulation = trim(p_motif),
+         annule_le = now(), annule_par = auth.uid()
+  where  id = p_id;
+
+  perform public.journaliser(
+    'annulation', 'deplacements', p_id::text,
+    jsonb_build_object(
+      'resume', coalesce(d.numero_piece, 'Trajet') || ' annulé · ' || d.depart || ' → '
+                || d.arrivee || ' · ' || public.km_effectifs(d) || ' km',
+      'motif', trim(p_motif)));
+
+  return jsonb_build_object('id', p_id, 'statut', 'annulee');
 end;
 $function$;
 
@@ -5926,6 +5991,21 @@ AS $function$
   end;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.produit_vente_ht(p_sens text, p_origine text, p_ht numeric, p_tva numeric, p_ttc numeric, p_acomptes numeric)
+ RETURNS numeric
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'public'
+AS $function$
+  select case
+    when p_sens = 'credit' then
+      p_ht - case when p_origine = 'solde' and p_acomptes > 0.005 and p_ttc > 0
+                  then p_acomptes - round(p_acomptes * p_tva / p_ttc, 2)
+                  else 0 end
+    else -p_ht
+  end;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.proposition_pour_piece(p_piece uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -5989,8 +6069,7 @@ begin
     and  not public.est_immobilisation(compte)
     and  public.date_ecriture(nature, date_piece) between p_debut and p_fin;
 
-  select coalesce(sum(case when sens = 'credit' then montant_ht
-                           else -montant_ht end), 0)
+  select coalesce(sum(public.produit_vente_ht(sens, origine, montant_ht, montant_tva, montant_ttc, acomptes_deduits)), 0)
   into   v_produits from public.pieces
   where  etat = 'validee' and nature in ('vente','avoir')
     and  public.date_ecriture(nature, date_piece) between p_debut and p_fin;
@@ -6110,8 +6189,7 @@ begin
           and  public.date_ecriture(nature, date_piece)
                between e.date_debut and p_fin),
       'produits', (
-        select coalesce(sum(case when sens = 'credit' then montant_ht
-                                 else -montant_ht end), 0)
+        select coalesce(sum(public.produit_vente_ht(sens, origine, montant_ht, montant_tva, montant_ttc, acomptes_deduits)), 0)
         from   public.pieces
         where  etat = 'validee' and nature in ('vente','avoir')
           and  public.date_ecriture(nature, date_piece)
@@ -7085,8 +7163,7 @@ begin
       where  etat = 'validee' and nature in ('achat','creation','km')
         and  public.date_ecriture(nature, date_piece) >= v_debut_mois),
     'ventes_mois', (
-      select coalesce(sum(case when sens = 'credit' then montant_ht
-                               else -montant_ht end), 0)
+      select coalesce(sum(public.produit_vente_ht(sens, origine, montant_ht, montant_tva, montant_ttc, acomptes_deduits)), 0)
       from   public.pieces
       where  etat = 'validee' and nature in ('vente','avoir')
         and  public.date_ecriture(nature, date_piece) >= v_debut_mois),
@@ -7493,7 +7570,7 @@ begin
           and  not public.est_immobilisation(compte)
           and  date_trunc('month', public.date_ecriture(nature, date_piece)) = m), 0),
       'produits', coalesce((
-        select sum(case when sens = 'credit' then montant_ht else -montant_ht end)
+        select sum(public.produit_vente_ht(sens, origine, montant_ht, montant_tva, montant_ttc, acomptes_deduits))
         from   public.pieces
         where  etat = 'validee' and nature in ('vente','avoir')
           and  date_trunc('month', public.date_ecriture(nature, date_piece)) = m), 0)
@@ -7663,7 +7740,7 @@ begin
     'charges_total',  v_charges,
     'immobilisations', v_immo,
     'produits_total', (
-      select coalesce(sum(case when sens = 'credit' then montant_ht else -montant_ht end), 0)
+      select coalesce(sum(public.produit_vente_ht(sens, origine, montant_ht, montant_tva, montant_ttc, acomptes_deduits)), 0)
       from   public.pieces
       where  etat = 'validee' and nature in ('vente','avoir')
         and  public.date_ecriture(nature, date_piece) between e.date_debut and e.date_fin),
@@ -8755,6 +8832,8 @@ grant execute on function annuler_ecriture(text,uuid,text) to authenticated;
 grant execute on function annuler_ecriture(text,uuid,text) to service_role;
 grant execute on function annuler_piece(uuid,text) to authenticated;
 grant execute on function annuler_piece(uuid,text) to service_role;
+grant execute on function annuler_trajet(uuid,text) to authenticated;
+grant execute on function annuler_trajet(uuid,text) to service_role;
 grant execute on function apercu_associe(text) to authenticated;
 grant execute on function apercu_associe(text) to service_role;
 grant execute on function apercu_banque(uuid) to authenticated;
@@ -8942,6 +9021,8 @@ grant execute on function plan_amortissement(uuid) to authenticated;
 grant execute on function plan_amortissement(uuid) to service_role;
 grant execute on function prefixe_piece(text,text) to authenticated;
 grant execute on function prefixe_piece(text,text) to service_role;
+grant execute on function produit_vente_ht(text,text,numeric,numeric,numeric,numeric) to authenticated;
+grant execute on function produit_vente_ht(text,text,numeric,numeric,numeric,numeric) to service_role;
 grant execute on function proposition_pour_piece(uuid) to authenticated;
 grant execute on function proposition_pour_piece(uuid) to service_role;
 grant execute on function rapport_mensuel(date,date) to authenticated;

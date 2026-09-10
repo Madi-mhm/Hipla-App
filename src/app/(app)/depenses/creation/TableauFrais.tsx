@@ -45,6 +45,10 @@ export default function TableauFrais({ frais, categories, peutModifier }: Props)
   const creation = frais.filter((f) => f.nature === 'creation');
   const preparation = frais.filter((f) => f.nature === 'preparation');
   const aRatifier = frais.filter((f) => f.statut_reprise === 'a_valider');
+  // Le procès-verbal reste imprimable une fois les lignes ratifiées :
+  // c'est l'exemplaire signé qu'on archive, et il faut pouvoir le refaire.
+  const lignesPv = aRatifier.length > 0
+    ? aRatifier : frais.filter((f) => f.statut_reprise === 'repris');
 
   const totaux = useMemo(() => {
     // Une ligne écartée ne fait plus partie de la reprise : ni la société
@@ -164,6 +168,24 @@ export default function TableauFrais({ frais, categories, peutModifier }: Props)
         </div>
       )}
 
+      {/* ---- Toutes ratifiées : le procès-verbal reste disponible ---- */}
+      {aRatifier.length === 0 && lignesPv.length > 0 && (
+        <div className="card" style={{ marginBottom: '1.25rem', borderLeft: '3px solid var(--success)' }}>
+          <p className="card__title" style={{ color: 'var(--success)' }}>
+            Procès-verbal de reprise
+          </p>
+          <p style={{ fontSize: 'var(--fs-sm)', lineHeight: 1.55, maxWidth: '68ch' }}>
+            Les {lignesPv.length} dépenses sont marquées ratifiées. Imprimez le
+            procès-verbal, faites-le signer par les deux associés et déposez-le
+            dans Réglages → Documents : c&apos;est lui qui justifie la déduction des
+            charges et la TVA récupérée en cas de contrôle.
+          </p>
+          <button onClick={() => setRecap(!recap)} className="btn btn--gold" style={{ marginTop: '.9rem' }}>
+            {recap ? 'Masquer' : 'Afficher le procès-verbal'}
+          </button>
+        </div>
+      )}
+
       {/* ---- Tableau pour le procès-verbal ---- */}
       {recap && (
         <div className="card" style={{ marginBottom: '1.25rem' }}>
@@ -196,7 +218,7 @@ export default function TableauFrais({ frais, categories, peutModifier }: Props)
                   </tr>
                 </thead>
                 <tbody>
-                  {aRatifier.map((f) => (
+                  {lignesPv.map((f) => (
                     <tr key={f.id} style={{ borderBottom: '1px solid var(--g-200)' }}>
                       <td style={tdRecap}>{date(f.date_engagement)}</td>
                       <td style={tdRecap}>
@@ -212,7 +234,7 @@ export default function TableauFrais({ frais, categories, peutModifier }: Props)
                     <td style={tdRecap} colSpan={3}><strong>Total</strong></td>
                     <td style={{ ...tdRecap, textAlign: 'right' }} className="amount">
                       <strong>
-                        {money(aRatifier.reduce((s, f) => s + Number(f.montant_ttc), 0))}
+                        {money(lignesPv.reduce((s, f) => s + Number(f.montant_ttc), 0))}
                       </strong>
                     </td>
                   </tr>

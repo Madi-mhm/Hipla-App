@@ -26,8 +26,17 @@ export default async function Page() {
   const [{ data: tiers }, { data: pieces }] = await Promise.all([
     supabase.from('tiers').select('*').order('nom'),
     supabase.from('pieces')
-      .select('tiers_id, nature, sens, etat, montant_ht, net_a_payer, montant_regle'),
+      .select('tiers_id, nature, sens, etat, origine, montant_ht, montant_tva, montant_ttc, acomptes_deduits, net_a_payer, montant_regle'),
   ]);
+
+  // Une facture de solde porte l'affaire entière, acompte compris : la
+  // part HT de l'acompte, déjà facturée, n'est pas comptée deux fois.
+  // Même calcul que le journal (`produit_vente_ht`).
+  const acompteHt = (p: { origine: string; montant_tva: number; montant_ttc: number; acomptes_deduits: number }) => {
+    const a = Number(p.acomptes_deduits), ttc = Number(p.montant_ttc);
+    if (p.origine !== 'solde' || a <= 0.005 || ttc <= 0) return 0;
+    return a - Math.round((a * Number(p.montant_tva) / ttc) * 100) / 100;
+  };
 
   // Toute pièce — même annulée ou brouillon — empêche la suppression :
   // elle garde un lien vers la fiche.
@@ -38,7 +47,7 @@ export default async function Page() {
     a.pieces += 1;
     if (p.etat !== 'validee') continue;
     if (p.nature === 'vente') {
-      a.facture += Number(p.montant_ht);
+      a.facture += Number(p.montant_ht) - acompteHt(p);
       a.du += Math.max(Number(p.net_a_payer) - Number(p.montant_regle), 0);
     } else if (p.nature === 'avoir') {
       a.facture -= Number(p.montant_ht);

@@ -11,6 +11,7 @@ import { LIBELLE_STATUT, CLASSE_STATUT, type Deplacement, type Vehicule } from '
 import ActionsValidation from '@/components/ActionsValidation';
 import AvisBareme from '@/components/AvisBareme';
 import ConstaterKm, { type EtatKm } from './ConstaterKm';
+import AnnulerTrajet from './AnnulerTrajet';
 
 export const metadata = { title: 'Déplacements — Hipla Gestion' };
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,8 @@ export default async function Page() {
   const supabase = await createClient();
   const annee = Number(aujourdhuiIso().slice(0, 4));
 
-  const [{ data: dep }, { data: veh }, { data: bar }, { data: etatKm }, { data: cumuls }] =
+  const [{ data: dep }, { data: veh }, { data: bar }, { data: etatKm }, { data: cumuls },
+         { data: indemnites }] =
     await Promise.all([
       supabase.from('deplacements')
         .select('*, vehicules(libelle, immatriculation, cv_fiscaux, motorisation, proprietaire_nom), profils!deplacements_cree_par_fkey(nom_complet)')
@@ -39,6 +41,10 @@ export default async function Page() {
       // progressif, un cumul tronqué change le coefficient de chaque
       // kilomètre, pas seulement ceux au-delà de la 200e ligne.
       supabase.rpc('cumul_km_annuel', { p_annee: annee }),
+      // Les périodes déjà indemnisées : elles décident quels trajets
+      // peuvent encore être annulés.
+      supabase.from('pieces').select('periode_fin')
+        .eq('nature', 'km').neq('etat', 'annulee'),
     ]);
 
   const deplacements = (dep ?? []) as Deplacement[];
@@ -64,6 +70,16 @@ export default async function Page() {
   const totalIndemnite = parVehicule.reduce((s, x) => s + x.indemnite, 0);
   const peutValider = peut(profil.role, 'depenses', 'validate');
   const peutCreer = peut(profil.role, 'depenses', 'create');
+
+  // Un trajet validé s'annule tant qu'aucune indemnité de l'année ne l'a
+  // compté : ni celle qui couvre sa date, ni une plus tardive, dont le
+  // cumul l'inclut. Même règle que `annuler_trajet`, qui refuse le reste.
+  const finsIndemnisees = ((indemnites ?? []) as Array<{ periode_fin: string | null }>)
+    .map((p) => p.periode_fin).filter((f): f is string => !!f);
+  const annulables = new Set(peutValider ? deplacements
+    .filter((d) => d.statut === 'validee' && !finsIndemnisees.some(
+      (fin) => fin >= d.date_trajet && fin.slice(0, 4) === d.date_trajet.slice(0, 4)))
+    .map((d) => d.id) : []);
 
   return (
     <>
@@ -139,7 +155,7 @@ export default async function Page() {
                   sans lui, le remboursement n'est pas défendable en contrôle.
                 </p>
               ) : (
-                <Tableau lignes={deplacements} peutValider={false} />
+                <Tableau lignes={deplacements} peutValider={false} annulables={annulables} />
               )}
             </div>
           </>
@@ -149,7 +165,9 @@ export default async function Page() {
   );
 }
 
-function Tableau({ lignes, peutValider }: { lignes: Deplacement[]; peutValider: boolean }) {
+function Tableau({ lignes, peutValider, annulables }: {
+  lignes: Deplacement[]; peutValider: boolean; annulables?: Set<string>;
+}) {
   return (
     <div className="table-scroll">
       <table style={{ minWidth: 620, fontSize: 'var(--fs-sm)' }}>
@@ -197,7 +215,14 @@ function Tableau({ lignes, peutValider }: { lignes: Deplacement[]; peutValider: 
                   </span>
                 )}
               </td>
-              <td style={td} className="col-secondaire">{d.motif}</td>
+              <td style={td} className="col-secondaire">
+                {d.motif}
+                {d.statut === 'annulee' && d.motif_annulation && (
+                  <span className="muted" style={{ display: 'block', fontSize: 'var(--fs-xs)' }}>
+                    Annulé : {d.motif_annulation}
+                  </span>
+                )}
+              </td>
               <td style={{ ...td, textAlign: 'right' }} className="amount">
                 {(Number(d.kilometres) * (d.aller_retour ? 2 : 1)).toLocaleString('fr-FR')}
               </td>
@@ -212,6 +237,13 @@ function Tableau({ lignes, peutValider }: { lignes: Deplacement[]; peutValider: 
                   className="btn btn--ghost btn--sm">
                   Refaire
                 </Link>
+                {annulables?.has(d.id) && (
+                  <>
+                    {' '}
+                    <AnnulerTrajet id={d.id}
+                      resume={`${d.numero_piece ?? 'Trajet'} du ${date(d.date_trajet)} · ${d.depart} → ${d.arrivee}`} />
+                  </>
+                )}
               </td>
               {peutValider && (
                 <td style={{ ...td, textAlign: 'right' }}>
