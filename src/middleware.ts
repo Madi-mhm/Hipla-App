@@ -10,6 +10,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 const PUBLIQUES = ['/connexion', '/auth'];
 
+// Appelées par le cron Vercel, qui n'a pas de session : sans cette
+// exception, il était renvoyé vers /connexion et rien ne tournait jamais.
+// Chaque route vérifie elle-même CRON_SECRET (GET) ou la session (POST).
+const CRON = ['/api/cron/', '/api/qonto'];
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -34,7 +39,8 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
   const chemin = request.nextUrl.pathname;
-  const estPublique = PUBLIQUES.some((p) => chemin.startsWith(p));
+  const estPublique =
+    PUBLIQUES.some((p) => chemin.startsWith(p)) || CRON.some((p) => chemin.startsWith(p));
 
   if (!user && !estPublique) {
     const url = request.nextUrl.clone();

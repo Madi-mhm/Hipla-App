@@ -14,6 +14,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { cronAutorise } from '@/lib/cron';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -67,9 +68,7 @@ function entetesQonto() {
 }
 
 export async function GET(request: NextRequest) {
-  const attendu = process.env.CRON_SECRET;
-  const recu = request.headers.get('authorization');
-  if (attendu && recu !== `Bearer ${attendu}`) {
+  if (!cronAutorise(request.headers.get('authorization'))) {
     return NextResponse.json({ erreur: 'Non autorisé' }, { status: 401 });
   }
   return synchroniser('cron');
