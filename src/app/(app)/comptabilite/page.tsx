@@ -81,9 +81,10 @@ export default async function Page() {
     }),
   ]);
 
+  // Le numéro d'écriture suit une séquence continue par journal, dans
+  // l'ordre de validation : trier sur lui suffit.
   const lignes = ((data ?? []) as Ligne[]).sort((a, b) =>
     a.journal_code.localeCompare(b.journal_code)
-    || a.ecriture_date.localeCompare(b.ecriture_date)
     || a.ecriture_num.localeCompare(b.ecriture_num)
     || a.ordre - b.ordre
   );
@@ -221,7 +222,7 @@ export default async function Page() {
                                 <span className="muted" style={{
                                   marginLeft: '.6rem', fontWeight: 400,
                                 }}>
-                                  {dateLong(lg[0].ecriture_date)}
+                                  {lg[0].piece_ref} · {dateLong(lg[0].ecriture_date)}
                                   {lg[0].piece_date !== lg[0].ecriture_date && (
                                     <> · pièce du {dateLong(lg[0].piece_date)}</>
                                   )}

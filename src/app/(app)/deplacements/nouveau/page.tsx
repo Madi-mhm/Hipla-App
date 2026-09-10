@@ -3,6 +3,8 @@ import Header from '@/components/Header';
 import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
+import AvisBareme from '@/components/AvisBareme';
+import { aujourdhuiIso } from '@/lib/dates';
 import FormulaireDeplacement from './FormulaireDeplacement';
 import type { Vehicule } from '@/lib/types';
 
@@ -18,7 +20,7 @@ export default async function Page(
   if (!peut(profil.role, 'depenses', 'create')) redirect('/deplacements');
 
   const supabase = await createClient();
-  const annee = new Date().getFullYear();
+  const annee = Number(aujourdhuiIso().slice(0, 4));
 
   const [{ data: vehicules }, { data: lieux }, { data: motifs },
          { data: bareme }, { data: etat }] = await Promise.all([
@@ -60,6 +62,7 @@ export default async function Page(
           ? undefined : 'Sera soumis à validation'}
       />
       <div className="content">
+        {(bareme ?? []).length === 0 && <AvisBareme annee={annee} />}
         <FormulaireDeplacement
           vehicules={v}
           peutValider={peut(profil.role, 'depenses', 'validate')}

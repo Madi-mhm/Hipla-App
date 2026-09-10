@@ -49,12 +49,29 @@ const TEINTES = [
   '#c08730', '#d4a256', '#8a5f1c', '#5f6a75',
 ];
 
+/**
+ * Impôt sur les sociétés, estimé sur le résultat comptable : 15 % jusqu'au
+ * plafond, 25 % au-delà. Le plafond de 42 500 € suit la durée de
+ * l'exercice — le premier dure plus de douze mois. Le taux réduit suppose
+ * un capital entièrement libéré, détenu à 75 % au moins par des personnes
+ * physiques. Les charges non déductibles ne sont pas réintégrées : c'est
+ * un ordre de grandeur, pas la liasse.
+ */
+function impotSocietes(resultat: number, debut: string, fin: string) {
+  const jours = Math.round((Date.parse(fin) - Date.parse(debut)) / 86_400_000) + 1;
+  const plafond = Math.round((42_500 * jours) / 365);
+  const reduit = Math.min(Math.max(resultat, 0), plafond);
+  const normal = Math.max(resultat - plafond, 0);
+  return { impot: Math.round((reduit * 0.15 + normal * 0.25) * 100) / 100, plafond };
+}
+
 /** Le résultat, les trois chiffres qui l'entourent, et l'état des contrôles. */
 export function ChiffresCles(
   { bord, compteCourant }: { bord: Bord; compteCourant: number },
 ) {
   const t = bord.tresorerie;
   const resultat = Number(bord.produits_total) - Number(bord.charges_total);
+  const is = impotSocietes(resultat, bord.exercice_debut, bord.exercice_fin);
   const anomalies = bord.controles.filter((c) => !c.ok);
 
   return (
@@ -72,6 +89,12 @@ export function ChiffresCles(
           <p style={herosNote}>
             {resultat >= 0 ? 'Bénéfice' : 'Perte'} · {money(Number(bord.produits_total))} de
             produits, {money(Number(bord.charges_total))} de charges
+          </p>
+          <p style={herosNote}>
+            {resultat > 0
+              ? <>Impôt sur les sociétés estimé : {money(is.impot)} — 15 % jusqu&apos;à{' '}
+                  {money(is.plafond)}, 25 % au-delà</>
+              : 'Pas d’impôt sur les sociétés : la perte se reporte sur les bénéfices suivants'}
           </p>
         </div>
 

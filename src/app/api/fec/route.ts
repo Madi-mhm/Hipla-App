@@ -125,10 +125,11 @@ export async function GET(requete: NextRequest) {
 
   const lignes = (data ?? []) as Ligne[];
 
-  // Ordre de lecture : journal, date, écriture, puis rang dans l'écriture.
+  // Ordre de lecture : journal, puis numéro d'écriture — une séquence
+  // continue par journal, dans l'ordre de validation — puis rang dans
+  // l'écriture.
   lignes.sort((a, b) =>
     a.journal_code.localeCompare(b.journal_code)
-    || a.ecriture_date.localeCompare(b.ecriture_date)
     || a.ecriture_num.localeCompare(b.ecriture_num)
     || a.ordre - b.ordre
   );

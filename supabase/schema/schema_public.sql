@@ -1,6 +1,6 @@
 -- ============================================================
 -- SCHÉMA COMPLET DE LA BASE — exporté de la base de production
--- le 2026-09-10T15:56:50.073Z (lecture seule). Ne pas modifier à la main :
+-- le 2026-09-10T19:10:49.846Z (lecture seule). Ne pas modifier à la main :
 -- ce fichier se régénère. Les changements passent par supabase/migrations.
 -- ============================================================
 set check_function_bodies = off;
@@ -901,12 +901,19 @@ CREATE OR REPLACE FUNCTION public.a_permission(p_module text, p_action text)
 AS $function$
   select exists (
     select 1
-    from public.permissions p
-    join public.profils u on u.role = p.role
-    where u.id = auth.uid()
-      and u.actif = true
-      and p.module = p_module
-      and p.action = p_action
+    from   public.permissions p
+    join   public.profils u on u.role = p.role
+    where  u.id = auth.uid()
+      and  u.actif = true
+      and  p.module = p_module
+      and  p.action = p_action
+  )
+  and (
+    coalesce(auth.jwt()->>'aal', 'aal1') = 'aal2'
+    or not exists (
+      select 1 from auth.mfa_factors f
+      where  f.user_id = auth.uid() and f.status = 'verified'
+    )
   );
 $function$;
 
@@ -4879,22 +4886,28 @@ AS $function$
                 then -1 else 1 end as signe,
            -- Compte de tiers de la pièce : 411 pour les ventes et avoirs
            -- de vente, 401 pour tout le reste.
-           case when p.nature in ('vente','avoir') then '411' else '401' end as compte_tiers
+           case when p.nature in ('vente','avoir') then '411' else '401' end as compte_tiers,
+           -- Prestation de services taxée en France : la TVA n'est due
+           -- qu'à l'encaissement, elle attend au 44574 jusque-là.
+           (p.nature in ('vente','avoir') and p.type_operation = 'service'
+            and p.regime_tva = 'france') as tva_en_attente
     from   public.pieces p cross join reprise r
     where  p.etat = 'validee'
-  )
+  ),
+  brut as (
 
   -- ---- ACHATS : charge ----
-  select 'AC', 'Achats',
-         coalesce(p.numero_piece, p.id::text), p.date_ecriture,
-         coalesce(p.compte, '606'), coalesce(c.libelle, 'Achats'),
-         'F' || left(regexp_replace(upper(p.tiers_libelle), '[^A-Z0-9]', '', 'g'), 8),
-         p.tiers_libelle,
-         coalesce(p.numero_piece, '—'), p.date_piece,
-         left(coalesce(p.objet, p.tiers_libelle), 200),
-         greatest(p.montant_ht * p.signe, 0),
-         greatest(-p.montant_ht * p.signe, 0),
-         coalesce(p.valide_le::date, p.date_ecriture), 1
+  select 'AC'::text as journal_code, 'Achats'::text as journal_lib,
+         coalesce(p.numero_piece, p.id::text) as ecriture_num,
+         p.date_ecriture as ecriture_date,
+         coalesce(p.compte, '606') as compte_num, coalesce(c.libelle, 'Achats') as compte_lib,
+         'F' || left(regexp_replace(upper(p.tiers_libelle), '[^A-Z0-9]', '', 'g'), 8) as comp_aux_num,
+         p.tiers_libelle as comp_aux_lib,
+         coalesce(p.numero_piece, '—') as piece_ref, p.date_piece as piece_date,
+         left(coalesce(p.objet, p.tiers_libelle), 200) as ecriture_lib,
+         greatest(p.montant_ht * p.signe, 0) as debit,
+         greatest(-p.montant_ht * p.signe, 0) as credit,
+         coalesce(p.valide_le::date, p.date_ecriture) as valid_date, 1 as ordre
   from   ecr p
   left join public.categories c on c.id = p.categorie_id
   where  p.nature in ('achat','creation','km')
@@ -5022,9 +5035,13 @@ AS $function$
 
   union all
 
+  -- TVA des services au 44574 en attendant l'encaissement ; celle des
+  -- biens, exigible à la facture, directement au 44571.
   select 'VE', 'Ventes',
          coalesce(p.numero_piece, p.id::text), p.date_ecriture,
-         '44571', 'TVA collectée',
+         case when p.tva_en_attente then '44574' else '44571' end,
+         case when p.tva_en_attente then 'TVA collectée en attente d''encaissement'
+              else 'TVA collectée' end,
          null, null,
          coalesce(p.numero_piece, '—'), p.date_piece,
          'TVA — ' || left(coalesce(p.objet, p.tiers_libelle), 180),
@@ -5037,11 +5054,63 @@ AS $function$
 
   union all
 
+  -- ---- FACTURE DE SOLDE : les acomptes déjà facturés sont repris ----
+  -- Produit et TVA au prorata du montant de la facture ; la TVA reprise
+  -- est arrondie et le produit en est le complément, pour que l'écriture
+  -- s'équilibre au centime.
+  select 'VE', 'Ventes',
+         coalesce(p.numero_piece, p.id::text), p.date_ecriture,
+         '706', 'Prestations de services',
+         null, null,
+         coalesce(p.numero_piece, '—'), p.date_piece,
+         'Acomptes déduits — ' || left(p.tiers_libelle, 170),
+         p.acomptes_deduits - round(p.acomptes_deduits * p.montant_tva / p.montant_ttc, 2), 0,
+         coalesce(p.valide_le::date, p.date_ecriture), 4
+  from   ecr p
+  where  p.nature = 'vente' and p.origine = 'solde'
+    and  p.acomptes_deduits > 0.005 and p.montant_ttc > 0
+    and  p.date_ecriture between p_debut and p_fin
+
+  union all
+
+  select 'VE', 'Ventes',
+         coalesce(p.numero_piece, p.id::text), p.date_ecriture,
+         case when p.tva_en_attente then '44574' else '44571' end,
+         case when p.tva_en_attente then 'TVA collectée en attente d''encaissement'
+              else 'TVA collectée' end,
+         null, null,
+         coalesce(p.numero_piece, '—'), p.date_piece,
+         'TVA sur acomptes déduits — ' || left(p.tiers_libelle, 160),
+         round(p.acomptes_deduits * p.montant_tva / p.montant_ttc, 2), 0,
+         coalesce(p.valide_le::date, p.date_ecriture), 5
+  from   ecr p
+  where  p.nature = 'vente' and p.origine = 'solde'
+    and  p.acomptes_deduits > 0.005 and p.montant_ttc > 0 and p.montant_tva > 0
+    and  p.date_ecriture between p_debut and p_fin
+
+  union all
+
+  select 'VE', 'Ventes',
+         coalesce(p.numero_piece, p.id::text), p.date_ecriture,
+         '411', 'Clients',
+         'C' || left(regexp_replace(upper(p.tiers_libelle), '[^A-Z0-9]', '', 'g'), 8),
+         p.tiers_libelle,
+         coalesce(p.numero_piece, '—'), p.date_piece,
+         'Acomptes déduits — ' || left(p.tiers_libelle, 170),
+         0, p.acomptes_deduits,
+         coalesce(p.valide_le::date, p.date_ecriture), 6
+  from   ecr p
+  where  p.nature = 'vente' and p.origine = 'solde'
+    and  p.acomptes_deduits > 0.005 and p.montant_ttc > 0
+    and  p.date_ecriture between p_debut and p_fin
+
+  union all
+
   -- ---- BANQUE ----
   -- Côté débit : la banque quand l'argent entre (sens crédit), le tiers
   -- quand il sort. Côté crédit : l'inverse. Le compte de tiers suit la
   -- NATURE de la pièce — 411 pour une vente ou un avoir de vente, 401
-  -- pour un achat ou un avoir d'achat — et plus seulement son sens.
+  -- pour un achat ou un avoir d'achat.
   select 'BQ', 'Banque',
          'REG-' || to_char(r.date_reglement, 'YYYYMMDD') || '-' || left(r.id::text, 8),
          r.date_reglement,
@@ -5088,6 +5157,51 @@ AS $function$
 
   union all
 
+  -- ---- BANQUE : la TVA encaissée devient exigible ----
+  -- La part de TVA du règlement passe du 44574 au 44571 (l'inverse pour
+  -- un avoir remboursé), calculée comme dans v_tva_exigible. Une
+  -- compensation facture / avoir ne transite pas : les deux montants
+  -- s'annulent au 44574.
+  select 'BQ', 'Banque',
+         'REG-' || to_char(r.date_reglement, 'YYYYMMDD') || '-' || left(r.id::text, 8),
+         r.date_reglement,
+         case when p.nature = 'vente' then '44574' else '44571' end,
+         case when p.nature = 'vente' then 'TVA collectée en attente d''encaissement'
+              else 'TVA collectée' end,
+         null, null,
+         coalesce(p.numero_piece, '—'), r.date_reglement,
+         'TVA exigible — ' || left(p.tiers_libelle, 170),
+         round(abs(p.tva_comptable) * r.montant / p.montant_ttc, 2), 0,
+         r.date_reglement, 3
+  from   public.reglements r
+  join   ecr p on p.id = r.piece_id
+  where  p.tva_en_attente
+    and  coalesce(r.moyen, '') not in ('avance_associe', 'compensation')
+    and  abs(p.tva_comptable) > 0.005 and p.montant_ttc > 0
+    and  r.date_reglement between p_debut and p_fin
+
+  union all
+
+  select 'BQ', 'Banque',
+         'REG-' || to_char(r.date_reglement, 'YYYYMMDD') || '-' || left(r.id::text, 8),
+         r.date_reglement,
+         case when p.nature = 'vente' then '44571' else '44574' end,
+         case when p.nature = 'vente' then 'TVA collectée'
+              else 'TVA collectée en attente d''encaissement' end,
+         null, null,
+         coalesce(p.numero_piece, '—'), r.date_reglement,
+         'TVA exigible — ' || left(p.tiers_libelle, 170),
+         0, round(abs(p.tva_comptable) * r.montant / p.montant_ttc, 2),
+         r.date_reglement, 4
+  from   public.reglements r
+  join   ecr p on p.id = r.piece_id
+  where  p.tva_en_attente
+    and  coalesce(r.moyen, '') not in ('avance_associe', 'compensation')
+    and  abs(p.tva_comptable) > 0.005 and p.montant_ttc > 0
+    and  r.date_reglement between p_debut and p_fin
+
+  union all
+
   -- ---- OPÉRATIONS DIVERSES ----
   select 'OD', 'Opérations diverses',
          coalesce(p.numero_piece, p.id::text), p.date_ecriture,
@@ -5113,7 +5227,19 @@ AS $function$
          0, p.montant_ttc,
          coalesce(p.valide_le::date, p.date_ecriture), 2
   from   ecr p
-  where  p.nature = 'banque' and p.date_ecriture between p_debut and p_fin;
+  where  p.nature = 'banque' and p.date_ecriture between p_debut and p_fin
+  )
+
+  -- ---- Numérotation continue par journal, dans l'ordre de validation ----
+  -- Une écriture validée garde son numéro : les suivantes, validées plus
+  -- tard, prennent les numéros d'après.
+  select b.journal_code, b.journal_lib,
+         b.journal_code || '-' || lpad((dense_rank() over (
+           partition by b.journal_code
+           order by b.valid_date, b.ecriture_date, b.ecriture_num))::text, 5, '0'),
+         b.ecriture_date, b.compte_num, b.compte_lib, b.comp_aux_num, b.comp_aux_lib,
+         b.piece_ref, b.piece_date, b.ecriture_lib, b.debit, b.credit, b.valid_date, b.ordre
+  from   brut b;
 $function$;
 
 CREATE OR REPLACE FUNCTION public.marquer_impayees()
@@ -5660,6 +5786,20 @@ begin
 end;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.periode_tva_declaree(p_date date)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select coalesce(reference, formulaire) || ' du ' || to_char(periode_debut, 'DD/MM/YYYY')
+         || ' au ' || to_char(periode_fin, 'DD/MM/YYYY')
+  from   public.declarations_tva
+  where  etat <> 'annulee' and p_date between periode_debut and periode_fin
+  order  by periode_debut
+  limit  1;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.periode_tva_libre(p_debut date, p_fin date)
  RETURNS void
  LANGUAGE plpgsql
@@ -6187,6 +6327,20 @@ begin
 end;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.refuser_periode_declaree(p_periode text)
+ RETURNS void
+ LANGUAGE plpgsql
+ IMMUTABLE
+ SET search_path TO 'public'
+AS $function$
+begin
+  raise exception
+    'Période de TVA déjà déclarée (%) : cette opération changerait une déclaration figée. '
+    'Si elle n''est pas encore déposée, annulez-la dans TVA → Déclarations puis refaites-la ; '
+    'sinon, enregistrez la correction à une date de la période en cours.', p_periode;
+end;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.regle_pour_transaction(p_transaction uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -6226,6 +6380,19 @@ begin
 
   return null;
 end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.reglement_declare(p_piece uuid, p_date date)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select public.periode_tva_declaree(public.date_ecriture(p.nature, p_date))
+  from   public.pieces p
+  where  p.id = p_piece and p.etat = 'validee'
+    and  p.regime_tva = 'france' and p.type_operation = 'service'
+    and  (p.nature in ('vente','avoir') or abs(p.tva_comptable) > 0.005);
 $function$;
 
 CREATE OR REPLACE FUNCTION public.rejeter_piece(p_id uuid, p_motif text)
@@ -7693,6 +7860,101 @@ begin
 end;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.verrou_tva_pieces()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_periode text;
+begin
+  -- Les tâches automatiques (synchronisation, sauvegarde) passent.
+  if auth.uid() is null then
+    return coalesce(new, old);
+  end if;
+
+  -- Rien de ce que lit la déclaration n'a changé : la modification passe
+  -- (notes, justificatif, rapprochement, montant réglé…).
+  if tg_op = 'UPDATE'
+     and (old.etat, old.nature, old.sens, old.date_piece, old.montant_ht, old.montant_tva,
+          old.montant_ttc, old.tva_comptable, old.taux_tva, old.regime_tva,
+          old.type_operation, old.tva_autoliquidee)
+         is not distinct from
+         (new.etat, new.nature, new.sens, new.date_piece, new.montant_ht, new.montant_tva,
+          new.montant_ttc, new.tva_comptable, new.taux_tva, new.regime_tva,
+          new.type_operation, new.tva_autoliquidee) then
+    return new;
+  end if;
+
+  -- L'état avant : ce que la déclaration a lu de cette pièce.
+  if tg_op in ('UPDATE', 'DELETE') then
+    select public.periode_tva_declaree(e.date_exigibilite) into v_periode
+    from   public.v_tva_exigible e
+    where  e.piece_id = old.id
+      and  (e.nature in ('vente','avoir') or abs(e.tva) > 0.005)
+      and  public.periode_tva_declaree(e.date_exigibilite) is not null
+    limit  1;
+  end if;
+
+  -- L'état après : ce qu'elle lirait désormais.
+  if v_periode is null and tg_op in ('INSERT', 'UPDATE') and new.etat = 'validee'
+     and (new.nature in ('vente','avoir') or abs(coalesce(new.tva_comptable, 0)) > 0.005
+          or coalesce(new.tva_autoliquidee, 0) > 0.005) then
+    if (new.regime_tva = 'autoliquidation' and coalesce(new.tva_autoliquidee, 0) > 0.005)
+       or (new.regime_tva = 'france' and new.type_operation = 'bien') then
+      v_periode := public.periode_tva_declaree(public.date_ecriture(new.nature, new.date_piece));
+    elsif new.regime_tva = 'france' and new.type_operation = 'service' and tg_op = 'UPDATE' then
+      select public.periode_tva_declaree(public.date_ecriture(new.nature, r.date_reglement))
+      into   v_periode
+      from   public.reglements r
+      where  r.piece_id = new.id
+        and  public.periode_tva_declaree(public.date_ecriture(new.nature, r.date_reglement)) is not null
+      limit  1;
+    end if;
+  end if;
+
+  if v_periode is not null then
+    perform public.refuser_periode_declaree(v_periode);
+  end if;
+  return coalesce(new, old);
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.verrou_tva_reglements()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_periode text;
+begin
+  if auth.uid() is null then
+    return coalesce(new, old);
+  end if;
+
+  -- Rattacher un règlement à l'opération bancaire ne change rien à la TVA.
+  if tg_op = 'UPDATE'
+     and (old.piece_id, old.date_reglement, old.montant)
+         is not distinct from (new.piece_id, new.date_reglement, new.montant) then
+    return new;
+  end if;
+
+  if tg_op in ('UPDATE', 'DELETE') then
+    v_periode := public.reglement_declare(old.piece_id, old.date_reglement);
+  end if;
+  if v_periode is null and tg_op in ('INSERT', 'UPDATE') then
+    v_periode := public.reglement_declare(new.piece_id, new.date_reglement);
+  end if;
+
+  if v_periode is not null then
+    perform public.refuser_periode_declaree(v_periode);
+  end if;
+  return coalesce(new, old);
+end;
+$function$;
+
 -- ---------- Vues ----------
 create or replace view public.v_audit_comptable with (security_invoker=on) as
 SELECT id,
@@ -8155,8 +8417,10 @@ CREATE TRIGGER trg_tiers_client AFTER INSERT OR UPDATE ON public.clients FOR EAC
 CREATE TRIGGER trg_piece_deplacements BEFORE INSERT ON public.deplacements FOR EACH ROW EXECUTE FUNCTION attribuer_numero_piece();
 CREATE TRIGGER trg_rerouter_justificatif BEFORE INSERT ON public.justificatifs FOR EACH ROW EXECUTE FUNCTION rerouter_justificatif();
 CREATE TRIGGER trg_verifier_payeur BEFORE INSERT OR UPDATE OF paye_par ON public.pieces FOR EACH ROW EXECUTE FUNCTION verifier_payeur();
+CREATE TRIGGER trg_verrou_tva BEFORE INSERT OR DELETE OR UPDATE ON public.pieces FOR EACH ROW EXECUTE FUNCTION verrou_tva_pieces();
 CREATE TRIGGER trg_recalculer_piece AFTER INSERT OR DELETE OR UPDATE ON public.pieces_lignes FOR EACH ROW EXECUTE FUNCTION recalculer_piece();
 CREATE TRIGGER trg_reglements AFTER INSERT OR DELETE OR UPDATE ON public.reglements FOR EACH ROW EXECUTE FUNCTION recalculer_reglements();
+CREATE TRIGGER trg_verrou_tva BEFORE INSERT OR DELETE OR UPDATE ON public.reglements FOR EACH ROW EXECUTE FUNCTION verrou_tva_reglements();
 CREATE TRIGGER trg_ecarter_empreintes BEFORE INSERT OR UPDATE OF montant, statut_qonto ON public.transactions_qonto FOR EACH ROW EXECUTE FUNCTION ecarter_empreintes();
 CREATE TRIGGER trg_piece_transactions BEFORE INSERT ON public.transactions_qonto FOR EACH ROW EXECUTE FUNCTION attribuer_numero_transaction();
 CREATE TRIGGER trg_creer_profil AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION creer_profil();
@@ -8670,6 +8934,8 @@ grant execute on function payeurs_possibles() to authenticated;
 grant execute on function payeurs_possibles() to service_role;
 grant execute on function periode_nature_libre(text,date,date) to authenticated;
 grant execute on function periode_nature_libre(text,date,date) to service_role;
+grant execute on function periode_tva_declaree(date) to authenticated;
+grant execute on function periode_tva_declaree(date) to service_role;
 grant execute on function periode_tva_libre(date,date) to authenticated;
 grant execute on function periode_tva_libre(date,date) to service_role;
 grant execute on function plan_amortissement(uuid) to authenticated;
@@ -8690,8 +8956,12 @@ grant execute on function recalculer_piece() to authenticated;
 grant execute on function recalculer_piece() to service_role;
 grant execute on function recalculer_reglements() to authenticated;
 grant execute on function recalculer_reglements() to service_role;
+grant execute on function refuser_periode_declaree(text) to authenticated;
+grant execute on function refuser_periode_declaree(text) to service_role;
 grant execute on function regle_pour_transaction(uuid) to authenticated;
 grant execute on function regle_pour_transaction(uuid) to service_role;
+grant execute on function reglement_declare(uuid,date) to authenticated;
+grant execute on function reglement_declare(uuid,date) to service_role;
 grant execute on function rejeter_piece(uuid,text) to authenticated;
 grant execute on function rejeter_piece(uuid,text) to service_role;
 grant execute on function rejeter_rapprochement(uuid) to authenticated;
@@ -8754,6 +9024,10 @@ grant execute on function valider_piece(uuid) to authenticated;
 grant execute on function valider_piece(uuid) to service_role;
 grant execute on function verifier_payeur() to authenticated;
 grant execute on function verifier_payeur() to service_role;
+grant execute on function verrou_tva_pieces() to authenticated;
+grant execute on function verrou_tva_pieces() to service_role;
+grant execute on function verrou_tva_reglements() to authenticated;
+grant execute on function verrou_tva_reglements() to service_role;
 
 -- ---------- Stockage ----------
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('justificatifs', 'justificatifs', false, 10485760, array['image/jpeg', 'image/png', 'image/webp', 'application/pdf']) on conflict (id) do nothing;

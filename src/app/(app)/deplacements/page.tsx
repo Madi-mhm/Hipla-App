@@ -6,8 +6,10 @@ import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import { money, date } from '@/lib/format';
 import { indemniteKm, type LigneBareme } from '@/lib/comptabilite';
+import { aujourdhuiIso } from '@/lib/dates';
 import { LIBELLE_STATUT, CLASSE_STATUT, type Deplacement, type Vehicule } from '@/lib/types';
 import ActionsValidation from '@/components/ActionsValidation';
+import AvisBareme from '@/components/AvisBareme';
 import ConstaterKm, { type EtatKm } from './ConstaterKm';
 
 export const metadata = { title: 'Déplacements — Hipla Gestion' };
@@ -19,7 +21,7 @@ export default async function Page() {
   if (!peut(profil.role, 'depenses', 'read')) redirect('/');
 
   const supabase = await createClient();
-  const annee = new Date().getFullYear();
+  const annee = Number(aujourdhuiIso().slice(0, 4));
 
   const [{ data: dep }, { data: veh }, { data: bar }, { data: etatKm }, { data: cumuls }] =
     await Promise.all([
@@ -75,6 +77,12 @@ export default async function Page() {
         */}
         {vehicules.length > 0 && etatKm && (
           <ConstaterKm etat={etatKm as EtatKm} peutConstater={peutValider} />
+        )}
+        {/* ConstaterKm prévient déjà quand des trajets attendent ; sinon,
+            l'absence du barème ne se voyait qu'à des indemnités à 0 €. */}
+        {vehicules.length > 0 && bareme.length === 0
+          && (etatKm as EtatKm | null)?.bareme_renseigne !== false && (
+          <AvisBareme annee={annee} />
         )}
 
         {vehicules.length === 0 ? (

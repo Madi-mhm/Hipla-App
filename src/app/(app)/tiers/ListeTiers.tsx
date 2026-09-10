@@ -64,6 +64,10 @@ export default function ListeTiers({ tiers, activite, peutGerer }: {
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [succes, setSucces] = useState<string | null>(null);
+  // Fusion : la fiche cliquée est absorbée par la fiche choisie.
+  const [fusion, setFusion] = useState<Tiers | null>(null);
+  const [cible, setCible] = useState('');
+  const [nomRetenu, setNomRetenu] = useState('');
 
   const visibles = useMemo(() => {
     const r = recherche.trim().toLowerCase();
@@ -80,12 +84,40 @@ export default function ListeTiers({ tiers, activite, peutGerer }: {
     setS((v) => ({ ...v, [k]: e.target.value }));
 
   function ouvrir(t: Tiers | 'nouveau') {
+    setFusion(null);
     setEdite(t);
     setS(t === 'nouveau' ? VIDE : depuisTiers(t));
     setErreur(null);
   }
 
   function fermer() { setEdite(null); setS(VIDE); }
+
+  function ouvrirFusion(t: Tiers) {
+    fermer();
+    setFusion(t); setCible(''); setNomRetenu(''); setErreur(null);
+  }
+
+  async function fusionner(e: React.FormEvent) {
+    e.preventDefault();
+    const garde = tiers.find((t) => t.id === cible);
+    if (!fusion || !garde) return;
+    const nom = nomRetenu.trim() || garde.nom;
+    if (!window.confirm(
+      `Les pièces de « ${fusion.nom} » passent sur « ${nom} », puis la fiche « ${fusion.nom} » est supprimée. Continuer ?`,
+    )) return;
+
+    setEnCours(true); setErreur(null);
+    const { data, error } = await createClient().rpc('fusionner_tiers', {
+      p_garder: garde.id, p_absorber: fusion.id, p_nom: nom,
+    });
+    setEnCours(false);
+    if (error) { setErreur(`Fusion impossible : ${error.message}`); return; }
+
+    const n = Number((data as { pieces_reprises?: number } | null)?.pieces_reprises ?? 0);
+    setSucces(`${fusion.nom} fusionné dans ${nom} — ${n} pièce${n > 1 ? 's' : ''} reprise${n > 1 ? 's' : ''}.`);
+    setFusion(null);
+    router.refresh();
+  }
 
   async function enregistrer(e: React.FormEvent) {
     e.preventDefault();
@@ -185,10 +217,39 @@ export default function ListeTiers({ tiers, activite, peutGerer }: {
             {bouton('fournisseurs', 'Fournisseurs')}
             {bouton('archives', 'Archivés')}
           </div>
-          {peutGerer && !edite && (
+          {peutGerer && !edite && !fusion && (
             <button onClick={() => ouvrir('nouveau')} className="btn btn--gold">+ Nouveau tiers</button>
           )}
         </div>
+
+        {fusion && (
+          <form onSubmit={fusionner} className={f.formulaire}>
+            <p className={`${f.note} ${f.pleine}`}>
+              Fusionner <strong>{fusion.nom}</strong> dans une autre fiche : ses pièces,
+              règles et alias bancaires y passent, les champs vides sont complétés,
+              puis sa fiche est supprimée. Les pièces gardent leur numéro et leurs montants.
+            </p>
+            <label><span>Fiche conservée *</span>
+              <select value={cible} required onChange={(e) => {
+                setCible(e.target.value);
+                setNomRetenu(tiers.find((t) => t.id === e.target.value)?.nom ?? '');
+              }}>
+                <option value="">Choisir…</option>
+                {tiers.filter((t) => t.id !== fusion.id).map((t) => (
+                  <option key={t.id} value={t.id}>{t.nom}{t.actif ? '' : ' (archivé)'}</option>
+                ))}
+              </select></label>
+            <label><span>Nom retenu</span>
+              <input value={nomRetenu} onChange={(e) => setNomRetenu(e.target.value)}
+                placeholder="Nom de la fiche conservée" /></label>
+            <div className={`${f.actions} ${f.pleine}`}>
+              <button type="submit" className="btn btn--gold" disabled={enCours || !cible}>
+                {enCours ? 'Fusion…' : 'Fusionner'}
+              </button>
+              <button type="button" className="btn btn--ghost" onClick={() => setFusion(null)}>Annuler</button>
+            </div>
+          </form>
+        )}
 
         {edite && (
           <form onSubmit={enregistrer} className={f.formulaire}>
@@ -317,6 +378,9 @@ export default function ListeTiers({ tiers, activite, peutGerer }: {
                           <button onClick={() => ouvrir(t)} className="btn btn--ghost btn--sm">Modifier</button>{' '}
                           <button onClick={() => basculerArchive(t)} className="btn btn--ghost btn--sm">
                             {t.actif ? 'Archiver' : 'Réactiver'}
+                          </button>{' '}
+                          <button onClick={() => ouvrirFusion(t)} className="btn btn--ghost btn--sm">
+                            Fusionner
                           </button>{' '}
                           {a.pieces === 0 && (
                             <button onClick={() => supprimer(t)} className="btn btn--danger btn--sm">Supprimer</button>
