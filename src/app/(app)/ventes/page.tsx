@@ -91,7 +91,7 @@ export default async function Page() {
 
   return (
     <>
-      <Header titre="Ventes" sousTitre="Factures, devis et encaissements" />
+      <Header section="ventes" titre="Ventes" sousTitre="Factures, devis et encaissements" />
       <div className="content">
         <ListeFactures
           factures={factures as unknown as Facture[]}

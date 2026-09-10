@@ -20,7 +20,7 @@ export default async function Page() {
 
   return (
     <>
-      <Header titre="Catégories" sousTitre={`${categories.length} catégories · plan comptable`} />
+      <Header section="reglages" titre="Catégories" sousTitre={`${categories.length} catégories · plan comptable`} />
       <div className="content">
         {groupes.map((g) => (
           <div className="card" key={g} style={{ marginBottom: '1rem' }}>

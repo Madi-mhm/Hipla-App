@@ -65,7 +65,7 @@ export default async function Page() {
 
   return (
     <>
-      <Header titre="Déplacements" sousTitre={`Indemnités kilométriques ${annee}`} />
+      <Header section="deplacements" titre="Déplacements" sousTitre={`Indemnités kilométriques ${annee}`} />
 
       <div className="content">
         {/*

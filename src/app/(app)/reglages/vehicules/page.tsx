@@ -23,7 +23,7 @@ export default async function Page() {
 
   return (
     <>
-      <Header titre="Véhicules" sousTitre="Véhicules personnels utilisés à titre professionnel" />
+      <Header section="reglages" titre="Véhicules" sousTitre="Véhicules personnels utilisés à titre professionnel" />
       <div className="content">
         <div className="card" style={{ marginBottom: '1.25rem' }}>
           <p className="card__title">Véhicules enregistrés</p>

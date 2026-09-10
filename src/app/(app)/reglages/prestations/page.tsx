@@ -29,7 +29,7 @@ export default async function Page() {
 
   return (
     <>
-      <Header titre="Prestations" sousTitre="Catalogue et tarifs" />
+      <Header section="reglages" titre="Prestations" sousTitre="Catalogue et tarifs" />
       <div className="content">
         <Catalogue
           prestations={(prestations ?? []) as Prestation[]}

@@ -137,7 +137,7 @@ export default async function Page({
     <>
       {/* L'en-tête annonçait « 200 enregistrées » qu'il y en ait 200 ou
           2 000 : la liste est plafonnée, le total ne l'est pas. */}
-      <Header titre="Dépenses" sousTitre={
+      <Header section="depenses" titre="Dépenses" sousTitre={
         depenses.length < totalEcritures
           ? `${depenses.length} affichées sur ${totalEcritures}`
           : `${totalEcritures} enregistrées`
@@ -189,7 +189,7 @@ export default async function Page({
 
         {peutCreer && (
           <div style={{ marginBottom: '1.25rem', display: 'flex', gap: '.6rem', flexWrap: 'wrap' }}>
-            <Link href="/depenses/extraire" className="btn btn--gold">
+            <Link href="/depenses/nouvelle" className="btn btn--gold">
               Extraire une facture
             </Link>
             <Link href="/depenses/nouvelle" className="btn btn--ghost">

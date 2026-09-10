@@ -35,7 +35,7 @@ export default async function Page() {
 
   return (
     <>
-      <Header titre="Entreprise" sousTitre="Identité légale et exercices" />
+      <Header section="reglages" titre="Entreprise" sousTitre="Identité légale et exercices" />
 
       <div className="content">
         {!modifiable && (

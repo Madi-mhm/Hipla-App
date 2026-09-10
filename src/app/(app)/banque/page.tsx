@@ -76,7 +76,7 @@ export default async function Page() {
 
   return (
     <>
-      <Header titre="Banque" sousTitre="Opérations Qonto et rapprochement" />
+      <Header section="banque" titre="Banque" sousTitre="Opérations Qonto et rapprochement" />
       <div className="content">
         <Banque
           transactions={transactions as TransactionQonto[]}

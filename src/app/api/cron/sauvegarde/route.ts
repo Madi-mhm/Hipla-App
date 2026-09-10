@@ -140,11 +140,6 @@ async function executer(declencheur: 'cron' | 'manuel', utilisateur: string | nu
   const idJournal = journal?.id as string | undefined;
 
   try {
-    // ---------- 0. Entretien des échéances d'abonnement ----------
-    // Profite du passage du cron : l'horizon glissant est maintenu et
-    // les justificatifs manquants sont marqués.
-    await db.rpc('generer_echeances');
-    await db.rpc('marquer_justificatifs_manquants');
 
     // ---------- 1. Export de la base ----------
     const horodatage = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

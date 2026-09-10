@@ -49,8 +49,12 @@ const CLASSE_STATUT: Record<string, string> = {
   brouillon: 'badge--neutral', annulee: 'badge--neutral',
 };
 
-export default function Recherche({ pieces }: { pieces: Piece[] }) {
-  const [terme, setTerme] = useState('');
+export default function Recherche({ pieces, termeInitial = '' }: {
+  pieces: Piece[];
+  /** Le terme saisi dans la barre de recherche de l'en-tête. */
+  termeInitial?: string;
+}) {
+  const [terme, setTerme] = useState(termeInitial);
   const [nature, setNature] = useState('');
   const [du, setDu] = useState('');
   const [au, setAu] = useState('');

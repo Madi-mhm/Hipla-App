@@ -170,7 +170,7 @@ export default function ListeFactures({
           {clients.length === 0 ? (
             <p className="muted" style={{ fontSize: 'var(--fs-sm)', marginTop: '.7rem' }}>
               Aucun client enregistré.{' '}
-              <Link href="/clients" style={{ color: 'var(--gold-ink)' }}>
+              <Link href="/tiers" style={{ color: 'var(--gold-ink)' }}>
                 Créez-en un d'abord
               </Link>.
             </p>

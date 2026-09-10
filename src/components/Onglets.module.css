@@ -1,0 +1,28 @@
+.onglets {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.55rem;
+  margin-bottom: -0.6rem; /* les onglets reposent sur la bordure de l'en-tête */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.onglets::-webkit-scrollbar { display: none; }
+
+.onglet {
+  flex-shrink: 0;
+  padding: 0.45rem 0.8rem 0.55rem;
+  font-family: var(--display);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--g-500);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.onglet:hover { color: var(--navy); }
+
+.actif {
+  color: var(--navy);
+  border-bottom-color: var(--gold);
+}

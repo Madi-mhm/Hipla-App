@@ -20,7 +20,7 @@ export default async function Page() {
 
   return (
     <>
-      <Header titre="Utilisateurs" sousTitre="Comptes et niveaux d'accès" />
+      <Header section="reglages" titre="Utilisateurs" sousTitre="Comptes et niveaux d'accès" />
 
       <div className="content">
         <div className="card" style={{ marginBottom: '1.5rem' }}>
