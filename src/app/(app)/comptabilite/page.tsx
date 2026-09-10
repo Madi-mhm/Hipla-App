@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { Fragment } from 'react';
 import Header from '@/components/Header';
 import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
@@ -210,7 +211,7 @@ export default async function Page() {
                         const equilibree = Math.abs(d - cr) < 0.005;
 
                         return (
-                          <>
+                          <Fragment key={num}>
                             {/* L'en-tête d'écriture : ce qui la rend lisible
                                 d'un bloc plutôt que ligne à ligne. */}
                             <tr key={`${num}-t`} style={{ background: 'var(--bone)' }}>
@@ -261,7 +262,7 @@ export default async function Page() {
                                 </td>
                               </tr>
                             ))}
-                          </>
+                          </Fragment>
                         );
                       })}
                     </tbody>

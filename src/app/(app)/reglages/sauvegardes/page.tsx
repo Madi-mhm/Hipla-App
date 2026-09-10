@@ -6,7 +6,7 @@ import { peut } from '@/lib/permissions';
 import { statistiquesR2, r2Configure, QUOTA_R2 } from '@/lib/r2';
 import Supervision from './Supervision';
 
-export const metadata = { title: 'Supervision — Hipla Gestion' };
+export const metadata = { title: 'Sauvegardes — Hipla Gestion' };
 export const dynamic = 'force-dynamic';
 
 /** Quotas du palier gratuit Supabase. */

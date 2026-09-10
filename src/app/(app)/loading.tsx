@@ -8,7 +8,7 @@ import { SquelettePage } from '@/components/Chargement';
 export default function Chargement() {
   return (
     <>
-      <EnteteStatique titre="Centre d'action" />
+      <EnteteStatique titre="Chargement…" />
       <SquelettePage cartes={3} lignes={5} />
     </>
   );

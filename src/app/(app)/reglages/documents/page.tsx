@@ -5,7 +5,7 @@ import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import Coffre, { type Document, type Etat } from './Coffre';
 
-export const metadata = { title: 'Coffre — Hipla Gestion' };
+export const metadata = { title: 'Documents — Hipla Gestion' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
