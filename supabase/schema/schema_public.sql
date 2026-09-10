@@ -1,6 +1,6 @@
 -- ============================================================
 -- SCHÉMA COMPLET DE LA BASE — exporté de la base de production
--- le 2026-09-10T14:14:15.117Z (lecture seule). Ne pas modifier à la main :
+-- le 2026-09-10T15:56:50.073Z (lecture seule). Ne pas modifier à la main :
 -- ce fichier se régénère. Les changements passent par supabase/migrations.
 -- ============================================================
 set check_function_bodies = off;
@@ -748,7 +748,7 @@ alter table prestations add constraint prestations_unite_check CHECK ((unite = A
 alter table profils add constraint profils_email_key UNIQUE (email);
 alter table profils add constraint profils_pkey PRIMARY KEY (id);
 alter table reglements add constraint reglements_montant_check CHECK ((montant <> (0)::numeric));
-alter table reglements add constraint reglements_moyen_check CHECK ((moyen = ANY (ARRAY['carte'::text, 'virement'::text, 'prelevement'::text, 'especes'::text, 'cheque'::text, 'avance_associe'::text, 'autre'::text])));
+alter table reglements add constraint reglements_moyen_check CHECK ((moyen = ANY (ARRAY['carte'::text, 'virement'::text, 'prelevement'::text, 'especes'::text, 'cheque'::text, 'avance_associe'::text, 'autre'::text, 'compensation'::text])));
 alter table reglements add constraint reglements_pkey PRIMARY KEY (id);
 alter table regles_appariement add constraint regles_appariement_pkey PRIMARY KEY (id);
 alter table regles_appariement add constraint regles_appariement_sens_check CHECK ((sens = ANY (ARRAY['debit'::text, 'credit'::text])));
@@ -1208,6 +1208,15 @@ begin
   if auth.uid() is not null
      and not public.a_permission(public.module_piece(p.nature), 'delete') then
     raise exception 'Permission insuffisante pour annuler cette pièce';
+  end if;
+
+  -- Une facture émise a été remise au client : on ne l'efface pas des
+  -- comptes, on la corrige. L'avoir garde la trace de la correction.
+  if p.nature in ('vente','avoir') and p.etat = 'validee' then
+    raise exception
+      'Une facture émise ne s''annule pas (%). Établissez un avoir : il la corrige '
+      'en gardant la trace, comme la loi l''exige.',
+      coalesce(p.numero_piece, 'sans numéro');
   end if;
 
   if p.etat = 'annulee' then
@@ -2702,6 +2711,81 @@ begin
 end;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.creer_avoir_vente(p_facture uuid, p_motif text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  f      record;
+  v_id   uuid;
+  v_res  jsonb;
+  v_motif text := nullif(trim(coalesce(p_motif, '')), '');
+begin
+  if auth.uid() is not null and not public.a_permission('ventes','create') then
+    raise exception 'Permission insuffisante';
+  end if;
+
+  select * into f from public.pieces where id = p_facture;
+  if not found or f.nature <> 'vente' then
+    raise exception 'Facture introuvable';
+  end if;
+  if f.etat <> 'validee' then
+    raise exception
+      'Seule une facture émise se corrige par un avoir. Un brouillon se modifie ou se supprime.';
+  end if;
+
+  -- Un avoir en préparation existe déjà pour cette facture : on le rouvre
+  -- plutôt que d'en créer un second.
+  select id into v_id from public.pieces
+  where  nature = 'avoir' and piece_liee_id = f.id and etat = 'brouillon'
+  limit  1;
+  if found then
+    return jsonb_build_object('id', v_id, 'existant', true);
+  end if;
+
+  v_res := public.creer_vente(
+    p_tiers      => f.tiers_id,
+    p_nature     => 'avoir',
+    p_date       => current_date,
+    p_objet      => 'Avoir sur la facture ' || f.numero_piece
+                    || coalesce(' — ' || v_motif, ''),
+    p_delai      => 0::smallint,
+    p_piece_liee => f.id,
+    p_notes      => v_motif
+  );
+  v_id := (v_res->>'id')::uuid;
+
+  -- Les lignes de la facture, à l'identique : un avoir total est prêt à
+  -- émettre ; pour un avoir partiel, on retire ou corrige des lignes.
+  insert into public.pieces_lignes (
+    piece_id, ordre, prestation_id, libelle, description, quantite, unite,
+    prix_unitaire_ht, remise_pct, taux_tva, montant_ht, montant_tva, montant_ttc
+  )
+  select v_id, ordre, prestation_id, libelle, description, quantite, unite,
+         prix_unitaire_ht, remise_pct, taux_tva, montant_ht, montant_tva, montant_ttc
+  from   public.pieces_lignes
+  where  piece_id = f.id
+  order  by ordre;
+
+  update public.pieces
+  set    date_prestation = f.date_prestation,
+         periode_debut   = f.periode_debut,
+         periode_fin     = f.periode_fin,
+         attendu_en_banque = false,
+         modifie_le      = now()
+  where  id = v_id;
+
+  perform public.journaliser(
+    'creation', 'pieces', v_id::text,
+    jsonb_build_object('resume', 'Avoir préparé sur ' || f.numero_piece || ' · ' || f.tiers_libelle,
+                       'motif', v_motif));
+
+  return jsonb_build_object('id', v_id, 'existant', false);
+end;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.creer_depense(p_date date, p_fournisseur text, p_categorie uuid, p_montant_ttc numeric, p_taux_tva numeric DEFAULT NULL::numeric, p_libelle text DEFAULT NULL::text, p_statut text DEFAULT 'en_attente'::text, p_origine text DEFAULT 'saisie'::text, p_transaction uuid DEFAULT NULL::uuid, p_numero_facture text DEFAULT NULL::text, p_moyen_paiement text DEFAULT 'carte'::text, p_paye_par text DEFAULT 'societe'::text, p_notes text DEFAULT NULL::text, p_extrait_ia boolean DEFAULT false, p_confiance numeric DEFAULT NULL::numeric, p_tva_facturee numeric DEFAULT NULL::numeric, p_tva_intracom text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -3570,6 +3654,31 @@ begin
 end;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.ecarter_empreintes()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if (coalesce(new.montant, 0) = 0 or new.statut_qonto in ('declined', 'reversed'))
+     and new.statut_traitement = 'a_traiter' then
+    new.statut_traitement := 'ecartee';
+    new.motif_ecart := 'Automatique : ' || case
+      when new.statut_qonto in ('declined', 'reversed')
+        then 'opération refusée ou annulée par la banque'
+      else 'empreinte de carte à 0 €, sans mouvement' end;
+  -- Une empreinte devenue une vraie opération redevient à traiter.
+  elsif new.statut_traitement = 'ecartee'
+     and coalesce(new.motif_ecart, '') like 'Automatique : %'
+     and coalesce(new.montant, 0) <> 0 and new.statut_qonto = 'completed' then
+    new.statut_traitement := 'a_traiter';
+    new.motif_ecart := null;
+  end if;
+  return new;
+end;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.ecarts_declaration(p_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -3705,8 +3814,14 @@ declare
   p        record;
   t        record;
   e        record;
+  f        record;
   v_lignes integer;
   v_piece  text;
+  v_comp   numeric := 0;
+  -- `f` n'est lu que si `v_lie` : lire un champ d'un record jamais
+  -- rempli lève une erreur, même dans une condition déjà fausse.
+  v_lie    boolean := false;
+  v_facture text;
 begin
   if auth.uid() is not null and not public.a_permission('ventes','validate') then
     raise exception 'Permission insuffisante pour émettre';
@@ -3746,6 +3861,20 @@ begin
       'sont obligatoires. Réglages → Entreprise.';
   end if;
 
+  -- Un avoir ne peut pas dépasser la facture qu'il corrige.
+  if p.nature = 'avoir' and p.piece_liee_id is not null then
+    select * into f from public.pieces where id = p.piece_liee_id;
+    if found then
+      v_lie := true;
+      v_facture := f.numero_piece;
+      if p.montant_ttc > f.montant_ttc + 0.005 then
+        raise exception 'L''avoir (% €) dépasse la facture % (% €).',
+          to_char(p.montant_ttc, 'FM999999D00'), f.numero_piece,
+          to_char(f.montant_ttc, 'FM999999D00');
+      end if;
+    end if;
+  end if;
+
   v_piece := public.numeroter_piece(p_piece);
 
   update public.pieces
@@ -3756,20 +3885,46 @@ begin
          modifie_le = now()
   where  id = p_piece;
 
+  -- AVOIR : il éteint d'abord ce qui reste dû sur la facture corrigée.
+  -- Deux règlements « compensation », sans mouvement bancaire : la
+  -- facture n'est plus à relancer et la TVA des deux pièces s'annule.
+  -- Le surplus éventuel (facture déjà payée) reste à rembourser.
+  if v_lie then
+    if f.nature = 'vente' and f.etat = 'validee' then
+      v_comp := least(greatest(f.net_a_payer - f.montant_regle, 0), p.montant_ttc);
+      if v_comp > 0.005 then
+        insert into public.reglements
+          (piece_id, date_reglement, montant, moyen, reference, notes, cree_par)
+        values
+          (f.id, p.date_piece, v_comp, 'compensation', v_piece,
+           'Soldée par l''avoir ' || v_piece, auth.uid()),
+          (p.id, p.date_piece, v_comp, 'compensation', v_facture,
+           'Imputé sur la facture ' || v_facture, auth.uid());
+      end if;
+    end if;
+    update public.pieces
+    set    attendu_en_banque = (p.montant_ttc - v_comp) > 0.005
+    where  id = p_piece;
+  end if;
+
   perform public.journaliser(
     'emission', 'pieces', p_piece::text,
     jsonb_build_object(
       'resume', v_piece || ' émise · ' || t.nom || ' — '
-                || to_char(p.montant_ttc, 'FM999999D00') || ' € TTC',
+                || to_char(p.montant_ttc, 'FM999999D00') || ' € TTC'
+                || case when v_comp > 0.005
+                        then ' · imputé sur ' || v_facture else '' end,
       'champs', jsonb_build_object(
         'client', t.nom, 'type_client', t.type,
         'montant_ht', p.montant_ht, 'montant_tva', p.montant_tva,
-        'montant_ttc', p.montant_ttc, 'date_echeance', p.date_echeance)
+        'montant_ttc', p.montant_ttc, 'date_echeance', p.date_echeance,
+        'compensation', v_comp)
     )
   );
 
   return jsonb_build_object('id', p_piece, 'numero_piece', v_piece,
-                            'etat', 'validee', 'montant_ttc', p.montant_ttc);
+                            'etat', 'validee', 'montant_ttc', p.montant_ttc,
+                            'compensation', v_comp);
 end;
 $function$;
 
@@ -4107,7 +4262,8 @@ AS $function$
     'ca_encaisse', (
       select coalesce(sum(round(r.montant / (1 + p.taux_tva / 100), 2)), 0)
       from   public.reglements r join public.pieces p on p.id = r.piece_id
-      where  p.nature = 'vente' and p.etat = 'validee'),
+      where  p.nature = 'vente' and p.etat = 'validee'
+        and  coalesce(r.moyen, '') <> 'compensation'),
     'tva_collectee', (
       select coalesce(sum(tva), 0) from public.v_tva_exigible where sens = 'credit'),
     'en_attente', (
@@ -4192,6 +4348,76 @@ begin
 
   return jsonb_build_object('piece_id', v_id, 'periode', e.periode,
                             'montant', e.montant_prevu);
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.fusionner_tiers(p_garder uuid, p_absorber uuid, p_nom text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  g        record;
+  a        record;
+  v_nom    text;
+  v_pieces integer;
+begin
+  if auth.uid() is not null and not public.a_permission('clients','update') then
+    raise exception 'Permission insuffisante';
+  end if;
+  if p_garder = p_absorber then
+    raise exception 'Choisissez deux fiches différentes.';
+  end if;
+
+  select * into g from public.tiers where id = p_garder;
+  if not found then raise exception 'Fiche à conserver introuvable'; end if;
+  select * into a from public.tiers where id = p_absorber;
+  if not found then raise exception 'Fiche à fusionner introuvable'; end if;
+
+  v_nom := coalesce(nullif(trim(coalesce(p_nom, '')), ''), g.nom);
+
+  update public.pieces set tiers_id = p_garder where tiers_id = p_absorber;
+  get diagnostics v_pieces = row_count;
+
+  -- Le libellé recopié sur les pièces forme le compte auxiliaire du FEC :
+  -- il suit le nom retenu, pour qu'un fournisseur n'ait qu'un compte.
+  update public.pieces set tiers_libelle = v_nom
+  where  tiers_id = p_garder and tiers_libelle is distinct from v_nom;
+
+  update public.contrats           set tiers_id = p_garder where tiers_id = p_absorber;
+  update public.regles_appariement set tiers_id = p_garder where tiers_id = p_absorber;
+  update public.alias_bancaires    set tiers_id = p_garder where tiers_id = p_absorber;
+
+  -- La fiche absorbée disparaît AVANT que la fiche conservée prenne le
+  -- nom retenu : les noms sont uniques, et le nom retenu peut être le sien.
+  delete from public.tiers where id = p_absorber;
+
+  update public.tiers set
+    nom             = v_nom,
+    est_client      = g.est_client or a.est_client,
+    est_fournisseur = g.est_fournisseur or a.est_fournisseur,
+    contact     = coalesce(g.contact, a.contact),
+    email       = coalesce(g.email, a.email),
+    telephone   = coalesce(g.telephone, a.telephone),
+    adresse     = coalesce(g.adresse, a.adresse),
+    code_postal = coalesce(g.code_postal, a.code_postal),
+    ville       = coalesce(g.ville, a.ville),
+    siret       = coalesce(g.siret, a.siret),
+    tva_intracom = coalesce(g.tva_intracom, a.tva_intracom),
+    numero_tva  = coalesce(g.numero_tva, a.numero_tva, g.tva_intracom, a.tva_intracom),
+    pays_code   = case when coalesce(g.pays_code, 'FR') = 'FR' and coalesce(a.pays_code, 'FR') <> 'FR'
+                       then a.pays_code else g.pays_code end,
+    notes       = nullif(concat_ws(E'\n', g.notes, a.notes), ''),
+    modifie_le  = now()
+  where id = p_garder;
+
+  perform public.journaliser(
+    'fusion', 'tiers', p_garder::text,
+    jsonb_build_object('resume', a.nom || ' fusionné dans ' || v_nom,
+                       'pieces_reprises', v_pieces, 'fiche_absorbee', p_absorber));
+
+  return jsonb_build_object('id', p_garder, 'nom', v_nom, 'pieces_reprises', v_pieces);
 end;
 $function$;
 
@@ -5638,6 +5864,7 @@ begin
   select coalesce(sum(r.montant), 0) into v_encaisse
   from   public.reglements r join public.pieces p on p.id = r.piece_id
   where  p.nature = 'vente' and p.etat = 'validee'
+    and  coalesce(r.moyen, '') <> 'compensation'
     and  r.date_reglement between p_debut and p_fin;
 
   return jsonb_build_object(
@@ -6700,6 +6927,7 @@ begin
       select coalesce(sum(r.montant), 0)
       from   public.reglements r join public.pieces p on p.id = r.piece_id
       where  p.nature = 'vente' and p.etat = 'validee'
+        and  coalesce(r.moyen, '') <> 'compensation'
         and  r.date_reglement >= v_debut_mois),
     'tva_collectee', (
       select coalesce(sum(tva), 0) from public.v_tva_exigible where sens = 'credit'),
@@ -7929,6 +8157,7 @@ CREATE TRIGGER trg_rerouter_justificatif BEFORE INSERT ON public.justificatifs F
 CREATE TRIGGER trg_verifier_payeur BEFORE INSERT OR UPDATE OF paye_par ON public.pieces FOR EACH ROW EXECUTE FUNCTION verifier_payeur();
 CREATE TRIGGER trg_recalculer_piece AFTER INSERT OR DELETE OR UPDATE ON public.pieces_lignes FOR EACH ROW EXECUTE FUNCTION recalculer_piece();
 CREATE TRIGGER trg_reglements AFTER INSERT OR DELETE OR UPDATE ON public.reglements FOR EACH ROW EXECUTE FUNCTION recalculer_reglements();
+CREATE TRIGGER trg_ecarter_empreintes BEFORE INSERT OR UPDATE OF montant, statut_qonto ON public.transactions_qonto FOR EACH ROW EXECUTE FUNCTION ecarter_empreintes();
 CREATE TRIGGER trg_piece_transactions BEFORE INSERT ON public.transactions_qonto FOR EACH ROW EXECUTE FUNCTION attribuer_numero_transaction();
 CREATE TRIGGER trg_creer_profil AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION creer_profil();
 
@@ -8308,6 +8537,8 @@ grant execute on function creer_achat(date,text,uuid,numeric,numeric,text,text,t
 grant execute on function creer_achat(date,text,uuid,numeric,numeric,text,text,text,uuid,text,text,text,text,boolean,numeric,numeric,text,smallint,text) to service_role;
 grant execute on function creer_avoir_achat(uuid,text,uuid,numeric,numeric,text,text,text) to authenticated;
 grant execute on function creer_avoir_achat(uuid,text,uuid,numeric,numeric,text,text,text) to service_role;
+grant execute on function creer_avoir_vente(uuid,text) to authenticated;
+grant execute on function creer_avoir_vente(uuid,text) to service_role;
 grant execute on function creer_depense(date,text,uuid,numeric,numeric,text,text,text,uuid,text,text,text,text,boolean,numeric,numeric,text) to authenticated;
 grant execute on function creer_depense(date,text,uuid,numeric,numeric,text,text,text,uuid,text,text,text,text,boolean,numeric,numeric,text) to service_role;
 grant execute on function creer_devis(uuid,text,date,integer,text) to authenticated;
@@ -8344,6 +8575,8 @@ grant execute on function devis_rattachables(uuid) to authenticated;
 grant execute on function devis_rattachables(uuid) to service_role;
 grant execute on function dossier_associe(text) to authenticated;
 grant execute on function dossier_associe(text) to service_role;
+grant execute on function ecarter_empreintes() to authenticated;
+grant execute on function ecarter_empreintes() to service_role;
 grant execute on function ecarts_declaration(uuid) to authenticated;
 grant execute on function ecarts_declaration(uuid) to service_role;
 grant execute on function echeance_pour_transaction(uuid) to authenticated;
@@ -8372,6 +8605,8 @@ grant execute on function etat_ventes() to authenticated;
 grant execute on function etat_ventes() to service_role;
 grant execute on function facturer_echeance(uuid) to authenticated;
 grant execute on function facturer_echeance(uuid) to service_role;
+grant execute on function fusionner_tiers(uuid,uuid,text) to authenticated;
+grant execute on function fusionner_tiers(uuid,uuid,text) to service_role;
 grant execute on function garantir_emission() to authenticated;
 grant execute on function garantir_emission() to service_role;
 grant execute on function generer_echeances_contrats(integer) to authenticated;

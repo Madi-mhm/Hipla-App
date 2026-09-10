@@ -34,8 +34,10 @@ select public.journaliser('modification', 'transactions_qonto', null,
 
 -- 2. Fusion des doublons
 select public.fusionner_tiers('e0274e25-9f05-4b93-a74b-139dcf108e43', '6fea56a7-985f-4d9c-a4f0-c31c52e344ba', 'Vercel Inc.');
-select public.fusionner_tiers('41ac9010-d4c3-4533-afd2-b8bd66697d04', '08904d8c-6a90-4253-b455-0c5c365e64dd', 'AREA Direction Péage');
+-- « AREA Direction Péage » d'abord : la fiche qui porte déjà le nom retenu
+-- doit disparaître avant que la fiche conservée ne le prenne.
 select public.fusionner_tiers('41ac9010-d4c3-4533-afd2-b8bd66697d04', '122a56b0-6caa-41c4-b379-941dc92ec33d', 'AREA Direction Péage');
+select public.fusionner_tiers('41ac9010-d4c3-4533-afd2-b8bd66697d04', '08904d8c-6a90-4253-b455-0c5c365e64dd', 'AREA Direction Péage');
 select public.fusionner_tiers('1d2c26ee-b624-4456-b8f0-417efa93432b', '20a507b0-c4d9-467a-948e-35629eaec2b6', 'Anthropic, PBC');
 select public.fusionner_tiers('54a8b14e-e231-44ea-a4e9-fa88d950c56d', '9a4a5aab-d181-4817-b663-80c4fd9c58e9', 'IONOS SARL');
 
