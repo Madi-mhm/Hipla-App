@@ -1,6 +1,6 @@
 -- ============================================================
 -- SCHÉMA COMPLET DE LA BASE — exporté de la base de production
--- le 2026-09-10T20:00:30.822Z (lecture seule). Ne pas modifier à la main :
+-- le 2026-09-11T14:15:27.336Z (lecture seule). Ne pas modifier à la main :
 -- ce fichier se régénère. Les changements passent par supabase/migrations.
 -- ============================================================
 set check_function_bodies = off;
@@ -312,7 +312,9 @@ create table public.exercices (
   date_fin date not null,
   statut text default 'ouvert'::text not null,
   regime_tva text not null,
-  cree_le timestamp with time zone default now() not null
+  cree_le timestamp with time zone default now() not null,
+  cloture_le timestamp with time zone,
+  cloture_par uuid
 );
 create table public.fournisseurs_connus (
   fournisseur text not null,
@@ -371,6 +373,14 @@ create table public.obligations (
   reference_depot text,
   notes text,
   cree_le timestamp with time zone default now() not null
+);
+create table public.obligations_suivi (
+  cle text not null,
+  fait_le date not null,
+  reference text,
+  note text,
+  fait_par uuid default auth.uid(),
+  modifie_le timestamp with time zone default now() not null
 );
 create table public.permissions (
   role role_utilisateur not null,
@@ -731,12 +741,13 @@ alter table obligations add constraint obligations_categorie_check CHECK ((categ
 alter table obligations add constraint obligations_libelle_date_limite_key UNIQUE (libelle, date_limite);
 alter table obligations add constraint obligations_periodicite_check CHECK ((periodicite = ANY (ARRAY['unique'::text, 'mensuelle'::text, 'trimestrielle'::text, 'annuelle'::text])));
 alter table obligations add constraint obligations_pkey PRIMARY KEY (id);
+alter table obligations_suivi add constraint obligations_suivi_pkey PRIMARY KEY (cle);
 alter table permissions add constraint permissions_pkey PRIMARY KEY (role, module, action);
 alter table pieces add constraint pieces_coherence CHECK ((abs(((montant_ht + montant_tva) - montant_ttc)) < 0.02));
 alter table pieces add constraint pieces_devis_statut_valide CHECK (((devis_statut IS NULL) OR (devis_statut = ANY (ARRAY['brouillon'::text, 'envoye'::text, 'accepte'::text, 'refuse'::text, 'expire'::text]))));
 alter table pieces add constraint pieces_etat_check CHECK ((etat = ANY (ARRAY['brouillon'::text, 'a_valider'::text, 'rejetee'::text, 'validee'::text, 'annulee'::text])));
 alter table pieces add constraint pieces_moyen_paiement_check CHECK ((moyen_paiement = ANY (ARRAY['carte'::text, 'virement'::text, 'prelevement'::text, 'especes'::text, 'cheque'::text, 'avance_associe'::text, 'autre'::text])));
-alter table pieces add constraint pieces_nature_check CHECK ((nature = ANY (ARRAY['achat'::text, 'vente'::text, 'avoir'::text, 'km'::text, 'creation'::text, 'banque'::text, 'paie'::text, 'amortissement'::text, 'devis'::text])));
+alter table pieces add constraint pieces_nature_check CHECK ((nature = ANY (ARRAY['achat'::text, 'vente'::text, 'avoir'::text, 'km'::text, 'creation'::text, 'banque'::text, 'paie'::text, 'amortissement'::text, 'devis'::text, 'inventaire'::text])));
 alter table pieces add constraint pieces_periode CHECK (((periode_fin IS NULL) OR (periode_debut IS NULL) OR (periode_fin >= periode_debut)));
 alter table pieces add constraint pieces_pkey PRIMARY KEY (id);
 alter table pieces add constraint pieces_regime_tva CHECK ((regime_tva = ANY (ARRAY['france'::text, 'autoliquidation'::text, 'exonere'::text, 'hors_champ'::text])));
@@ -1987,6 +1998,57 @@ AS $function$
   limit 5;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.cloturer_exercice(p_exercice uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  e     record;
+  v_fec jsonb;
+  v_n   integer;
+begin
+  if auth.uid() is not null and not public.a_permission('tva', 'validate') then
+    raise exception 'Seul le propriétaire clôture un exercice';
+  end if;
+  select * into e from public.exercices where id = p_exercice for update;
+  if not found then raise exception 'Exercice introuvable'; end if;
+  if e.statut = 'clos' then raise exception 'Cet exercice est déjà clos'; end if;
+  if e.date_fin >= current_date then
+    raise exception 'L''exercice n''est pas terminé : il se clôture à partir du %.',
+                    to_char(e.date_fin + 1, 'DD/MM/YYYY');
+  end if;
+  if exists (select 1 from public.exercices where date_fin < e.date_debut and statut <> 'clos') then
+    raise exception 'Clôturez d''abord l''exercice précédent.';
+  end if;
+
+  v_fec := public.controle_fec(e.date_debut, e.date_fin);
+  if not coalesce((v_fec->>'equilibre')::boolean, true) then
+    raise exception 'Le journal est déséquilibré de % € : corrigez avant de clôturer.',
+                    v_fec->>'ecart';
+  end if;
+
+  select count(*) into v_n from public.pieces
+  where  etat = 'a_valider' and date_piece between e.date_debut and e.date_fin;
+  if v_n > 0 then
+    raise exception '% pièce(s) de l''exercice attendent une validation : décidez avant '
+                    'de clôturer.', v_n;
+  end if;
+
+  update public.exercices
+  set    statut = 'clos', cloture_le = now(), cloture_par = auth.uid()
+  where  id = p_exercice;
+
+  perform public.journaliser(
+    'cloture', 'exercices', p_exercice::text,
+    jsonb_build_object('resume', 'Exercice du ' || to_char(e.date_debut, 'DD/MM/YYYY')
+                                 || ' au ' || to_char(e.date_fin, 'DD/MM/YYYY') || ' clos'));
+
+  return jsonb_build_object('id', p_exercice, 'statut', 'clos');
+end;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.cloturer_tva(p_debut date, p_fin date, p_depose_le date DEFAULT NULL::date, p_reference text DEFAULT NULL::text, p_notes text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -2096,6 +2158,71 @@ begin
     'tiers_id', p.tiers_id,
     'siret', (select siret from public.tiers where id = p.tiers_id),
     'numero_tva', (select numero_tva from public.tiers where id = p.tiers_id));
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.comptabiliser_is(p_exercice uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  e          record;
+  r          jsonb;
+  v_id       uuid;
+  v_piece    text;
+  v_remplace integer;
+  v_impot    numeric;
+begin
+  if auth.uid() is not null and not public.a_permission('tva', 'validate') then
+    raise exception 'Seul le propriétaire comptabilise l''impôt';
+  end if;
+  select * into e from public.exercices where id = p_exercice;
+  if not found then raise exception 'Exercice introuvable'; end if;
+  if e.statut = 'clos' then raise exception 'Cet exercice est clos'; end if;
+
+  -- Recalcul : l'écriture précédente est annulée, la nouvelle la remplace.
+  update public.pieces
+  set    etat = 'annulee', motif_annulation = 'Impôt recalculé',
+         annule_le = now(), annule_par = auth.uid(), modifie_le = now()
+  where  nature = 'inventaire' and origine = 'is' and etat <> 'annulee'
+    and  date_piece = e.date_fin;
+  get diagnostics v_remplace = row_count;
+
+  r := public.resultat_fiscal(p_exercice);
+  v_impot := (r->>'impot')::numeric;
+
+  if v_impot <= 0 then
+    return r || jsonb_build_object('comptabilise', false, 'remplacees', v_remplace);
+  end if;
+
+  insert into public.pieces (
+    nature, sens, origine, date_piece, tiers_libelle, objet, compte,
+    montant_ht, taux_tva, montant_tva, montant_ttc, tva_comptable,
+    type_operation, regime_tva, etat, attendu_en_banque,
+    periode_debut, periode_fin, notes, cree_par, valide_par, valide_le
+  ) values (
+    'inventaire', 'debit', 'is', e.date_fin, 'Impôt sur les sociétés',
+    'IS de l''exercice clos le ' || to_char(e.date_fin, 'DD/MM/YYYY'), '695',
+    v_impot, 0, 0, v_impot, 0,
+    'service', 'hors_champ', 'validee', false,
+    e.date_debut, e.date_fin,
+    'Résultat fiscal ' || (r->>'resultat_fiscal') || ' € — 15 % sur '
+      || (r->>'base_taux_reduit') || ' €, 25 % sur ' || (r->>'base_taux_normal') || ' €.',
+    auth.uid(), auth.uid(), now()
+  )
+  returning id into v_id;
+
+  v_piece := public.numeroter_piece(v_id);
+
+  perform public.journaliser(
+    'creation', 'pieces', v_id::text,
+    jsonb_build_object('resume', v_piece || ' · impôt sur les sociétés — '
+                                 || to_char(v_impot, 'FM999999990D00') || ' €'));
+
+  return r || jsonb_build_object('comptabilise', true, 'id', v_id, 'numero_piece', v_piece,
+                                 'remplacees', v_remplace);
 end;
 $function$;
 
@@ -2268,7 +2395,7 @@ begin
     '6811',
     v_total, 0, 0, v_total,
     0, 'service', 'hors_champ',
-    'validee', 'aucun', 'societe', false,
+    'validee', null, 'societe', false,
     p_debut, p_fin,
     'Charge calculée, sans décaissement. Contrepartie au compte 28.',
     auth.uid(), auth.uid(), now()
@@ -2940,6 +3067,83 @@ begin
 
   return jsonb_build_object('id', v_id, 'numero_piece', v_numero,
                             'valable_jusquau', v_date + coalesce(p_validite_jours, 30));
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.creer_ecriture_inventaire(p_type text, p_exercice uuid, p_compte text, p_libelle text, p_montant numeric, p_tva numeric DEFAULT 0, p_tiers text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  e       record;
+  v_id    uuid;
+  v_piece text;
+  v_tva   numeric := round(coalesce(p_tva, 0), 2);
+begin
+  if auth.uid() is not null and not public.a_permission('tva', 'validate') then
+    raise exception 'Seul le propriétaire passe les écritures de clôture';
+  end if;
+
+  select * into e from public.exercices where id = p_exercice;
+  if not found then raise exception 'Exercice introuvable'; end if;
+  if e.statut = 'clos' then raise exception 'Cet exercice est clos'; end if;
+
+  if p_type not in ('cca', 'fnp', 'pca', 'par') then
+    raise exception 'Type d''écriture inconnu : %', p_type;
+  end if;
+  p_compte := trim(coalesce(p_compte, ''));
+  if p_type in ('cca', 'fnp') and p_compte !~ '^6[0-9]+$' then
+    raise exception 'Une charge constatée d''avance ou une facture non parvenue porte '
+                    'sur un compte de charge (6…).';
+  end if;
+  if p_type in ('pca', 'par') and p_compte !~ '^7[0-9]+$' then
+    raise exception 'Un produit constaté d''avance ou à recevoir porte sur un compte '
+                    'de produit (7…).';
+  end if;
+  if coalesce(p_montant, 0) <= 0 then raise exception 'Le montant doit être positif'; end if;
+  if v_tva < 0 then raise exception 'La TVA ne peut pas être négative'; end if;
+  if p_type in ('cca', 'pca') and v_tva <> 0 then
+    raise exception 'Une écriture constatée d''avance se passe hors taxe : la TVA a déjà '
+                    'suivi la facture.';
+  end if;
+  if trim(coalesce(p_libelle, '')) = '' then
+    raise exception 'Un libellé est obligatoire';
+  end if;
+
+  insert into public.pieces (
+    nature, sens, origine, date_piece, tiers_libelle, objet, compte,
+    montant_ht, taux_tva, montant_tva, montant_ttc, tva_comptable,
+    type_operation, regime_tva, etat, attendu_en_banque,
+    periode_debut, periode_fin, notes, cree_par, valide_par, valide_le
+  ) values (
+    'inventaire', case when p_type in ('fnp', 'pca') then 'debit' else 'credit' end,
+    p_type, e.date_fin,
+    coalesce(nullif(trim(p_tiers), ''), 'Écriture de clôture'), trim(p_libelle), p_compte,
+    round(p_montant, 2),
+    case when v_tva > 0 then round(v_tva / p_montant * 100, 2) else 0 end,
+    v_tva, round(p_montant, 2) + v_tva, 0,
+    'service', 'hors_champ', 'validee', false,
+    e.date_debut, e.date_fin,
+    'Extournée le ' || to_char(e.date_fin + 1, 'DD/MM/YYYY') || '.',
+    auth.uid(), auth.uid(), now()
+  )
+  returning id into v_id;
+
+  v_piece := public.numeroter_piece(v_id);
+
+  perform public.journaliser(
+    'creation', 'pieces', v_id::text,
+    jsonb_build_object(
+      'resume', v_piece || ' · '
+                || case p_type when 'cca' then 'charge constatée d''avance'
+                               when 'fnp' then 'facture non parvenue'
+                               when 'pca' then 'produit constaté d''avance'
+                               else 'produit à recevoir' end
+                || ' — ' || to_char(p_montant, 'FM999999990D00') || ' € HT'));
+
+  return jsonb_build_object('id', v_id, 'numero_piece', v_piece);
 end;
 $function$;
 
@@ -4193,6 +4397,156 @@ AS $function$
   );
 $function$;
 
+CREATE OR REPLACE FUNCTION public.etat_cloture(p_exercice uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  e        record;
+  v_fec    jsonb;
+  v_512    numeric;
+  v_qonto  numeric;
+  v_n      integer;
+  v_immo   integer;
+  v_regist integer;
+  v_dot    boolean;
+  v_decl   text;
+  v_inv    integer;
+  v_rf     jsonb;
+  v_is     numeric;
+  v_etapes jsonb := '[]'::jsonb;
+begin
+  select * into e from public.exercices where id = p_exercice;
+  if not found then raise exception 'Exercice introuvable'; end if;
+
+  -- 1. Chaque opération bancaire a son écriture.
+  select count(*) into v_n from public.transactions_qonto
+  where  statut_qonto = 'completed' and statut_traitement = 'a_traiter'
+    and  abs(montant) > 0.005 and date_operation between e.date_debut and e.date_fin;
+  v_etapes := v_etapes || jsonb_build_object('cle', 'banque',
+    'libelle', 'Opérations bancaires rattachées', 'ok', v_n = 0,
+    'mesure', case when v_n = 0 then 'Toutes rattachées' else v_n || ' à traiter' end,
+    'lien', '/banque');
+
+  -- 2. La banque du journal retombe sur le relevé.
+  select coalesce(sum(debit - credit), 0) into v_512
+  from   public.lignes_fec(e.date_debut, e.date_fin) where compte_num like '512%';
+  select coalesce(sum(case when sens = 'credit' then montant else -montant end), 0)
+  into   v_qonto from public.transactions_qonto
+  where  statut_qonto = 'completed' and date_operation <= e.date_fin;
+  v_etapes := v_etapes || jsonb_build_object('cle', 'rapprochement',
+    'libelle', 'Banque du journal = relevé Qonto', 'ok', abs(v_512 - v_qonto) < 0.005,
+    'mesure', 'Journal ' || to_char(v_512, 'FM999999990D00') || ' € · relevé '
+              || to_char(v_qonto, 'FM999999990D00') || ' €',
+    'lien', '/banque');
+
+  -- 3. Plus rien n'attend une décision.
+  select count(*) into v_n from public.pieces
+  where  etat = 'a_valider' and date_piece between e.date_debut and e.date_fin;
+  v_etapes := v_etapes || jsonb_build_object('cle', 'validation',
+    'libelle', 'Aucune pièce en attente de validation', 'ok', v_n = 0,
+    'mesure', case when v_n = 0 then 'Rien en attente' else v_n || ' à valider' end,
+    'lien', '/depenses');
+
+  -- 4. Chaque dépense a sa facture.
+  select count(*) into v_n from public.v_pieces_completes
+  where  facture_manquante and date_piece between e.date_debut and e.date_fin;
+  v_etapes := v_etapes || jsonb_build_object('cle', 'justificatifs',
+    'libelle', 'Factures rattachées aux dépenses', 'ok', v_n = 0,
+    'mesure', case when v_n = 0 then 'Toutes rattachées' else v_n || ' sans facture' end,
+    'lien', '/banque/justificatifs');
+
+  -- 5. Les trajets de l'exercice sont indemnisés.
+  select count(*) into v_n from public.deplacements d
+  where  d.statut in ('validee', 'en_attente') and d.date_trajet <= e.date_fin
+    and  d.date_trajet >= e.date_debut
+    and  not exists (select 1 from public.pieces p
+                     where p.nature = 'km' and p.etat <> 'annulee'
+                       and p.periode_debut <= d.date_trajet and p.periode_fin >= d.date_trajet);
+  v_etapes := v_etapes || jsonb_build_object('cle', 'km',
+    'libelle', 'Indemnités kilométriques constatées', 'ok', v_n = 0,
+    'mesure', case when v_n = 0 then 'Tous les trajets indemnisés'
+                   else v_n || ' trajet(s) à valider ou constater' end,
+    'lien', '/deplacements');
+
+  -- 6. Les frais de création sont repris par la société.
+  select count(*) into v_n from public.pieces
+  where  nature = 'creation' and etat = 'a_valider';
+  v_etapes := v_etapes || jsonb_build_object('cle', 'creation',
+    'libelle', 'Frais de création ratifiés', 'ok', v_n = 0,
+    'mesure', case when v_n = 0 then 'Ratifiés' else v_n || ' à ratifier' end,
+    'lien', '/depenses/creation');
+
+  -- 7. Immobilisations inscrites et amorties.
+  select count(*) into v_n from public.pieces p
+  where  p.etat = 'validee' and public.est_immobilisation(p.compte)
+    and  p.date_piece <= e.date_fin
+    and  not exists (select 1 from public.immobilisations i where i.piece_id = p.id);
+  select count(*) into v_regist from public.immobilisations;
+  select exists (select 1 from public.pieces where nature = 'amortissement'
+                 and etat <> 'annulee' and periode_fin = e.date_fin) into v_dot;
+  v_etapes := v_etapes || jsonb_build_object('cle', 'immobilisations',
+    'libelle', 'Immobilisations inscrites et amorties',
+    'ok', v_n = 0 and (v_regist = 0 or v_dot),
+    'mesure', case when v_n > 0 then v_n || ' à inscrire au registre'
+                   when v_regist = 0 then 'Aucune immobilisation'
+                   when v_dot then 'Dotation constatée'
+                   else 'Dotation de l''exercice à constater' end,
+    'lien', '/comptabilite/immobilisations');
+
+  -- 8. Écritures de clôture : une revue, pas un compte à zéro.
+  select count(*) into v_inv from public.pieces
+  where  nature = 'inventaire' and origine in ('cca', 'fnp', 'pca', 'par')
+    and  etat = 'validee' and date_piece = e.date_fin;
+  v_etapes := v_etapes || jsonb_build_object('cle', 'inventaire',
+    'libelle', 'Charges et produits rattachés au bon exercice', 'ok', null,
+    'mesure', case when v_inv = 0 then 'À revoir — aucune écriture passée'
+                   else v_inv || ' écriture(s) passée(s)' end,
+    'lien', null);
+
+  -- 9. Le journal s'équilibre.
+  v_fec := public.controle_fec(e.date_debut, e.date_fin);
+  v_etapes := v_etapes || jsonb_build_object('cle', 'equilibre',
+    'libelle', 'Journal équilibré', 'ok', coalesce((v_fec->>'equilibre')::boolean, true),
+    'mesure', coalesce(v_fec->>'ecart', '0') || ' € d''écart',
+    'lien', '/comptabilite');
+
+  -- 10. La TVA de l'exercice est déclarée.
+  select coalesce(reference, formulaire) || ' jusqu''au ' || to_char(periode_fin, 'DD/MM/YYYY')
+  into   v_decl from public.declarations_tva
+  where  etat <> 'annulee' and periode_fin >= e.date_fin and periode_debut <= e.date_fin
+  order  by periode_fin desc limit 1;
+  v_etapes := v_etapes || jsonb_build_object('cle', 'tva',
+    'libelle', 'TVA de l''exercice déclarée', 'ok', v_decl is not null,
+    'mesure', coalesce(v_decl, case when e.date_fin < current_date then 'À déclarer'
+                                    else 'Après la clôture' end),
+    'lien', '/tva/cloture');
+
+  -- 11. L'impôt est comptabilisé s'il est dû.
+  v_rf := public.resultat_fiscal(p_exercice);
+  select coalesce(sum(montant_ht), 0) into v_is from public.pieces
+  where  nature = 'inventaire' and origine = 'is' and etat = 'validee'
+    and  date_piece = e.date_fin;
+  v_etapes := v_etapes || jsonb_build_object('cle', 'is',
+    'libelle', 'Impôt sur les sociétés comptabilisé',
+    'ok', abs(v_is - (v_rf->>'impot')::numeric) < 0.5,
+    'mesure', case when (v_rf->>'impot')::numeric = 0 and v_is = 0 then 'Aucun impôt dû'
+                   else 'Dû ' || (v_rf->>'impot') || ' € · comptabilisé '
+                        || to_char(v_is, 'FM999999990') || ' €' end,
+    'lien', null);
+
+  return jsonb_build_object(
+    'exercice', jsonb_build_object('id', e.id, 'debut', e.date_debut, 'fin', e.date_fin,
+                                   'statut', e.statut, 'regime_tva', e.regime_tva,
+                                   'cloture_le', e.cloture_le,
+                                   'termine', e.date_fin < current_date),
+    'etapes', v_etapes,
+    'resultat', v_rf);
+end;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.etat_coffre()
  RETURNS jsonb
  LANGUAGE sql
@@ -4360,6 +4714,46 @@ AS $function$
               or exists (select 1 from public.reglements r
                          where r.piece_id = p.id and r.date_reglement is null)))
   );
+$function$;
+
+CREATE OR REPLACE FUNCTION public.etats_financiers(p_exercice uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  e record;
+begin
+  select * into e from public.exercices where id = p_exercice;
+  if not found then raise exception 'Exercice introuvable'; end if;
+
+  return jsonb_build_object(
+    'exercice', jsonb_build_object('id', e.id, 'debut', e.date_debut, 'fin', e.date_fin,
+                                   'statut', e.statut, 'regime_tva', e.regime_tva),
+    'comptes', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+               'compte', compte_num, 'libelle', libelle,
+               'debit', debit, 'credit', credit) order by compte_num), '[]'::jsonb)
+      from (select compte_num, max(compte_lib) as libelle,
+                   round(sum(debit), 2) as debit, round(sum(credit), 2) as credit
+            from   public.lignes_fec(e.date_debut, e.date_fin)
+            group  by compte_num) s),
+    'fiscal', public.resultat_fiscal(p_exercice),
+    'capital', (select coalesce(sum(capital_souscrit), 0) from public.associes where actif));
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.exercice_clos(p_date date)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select 'du ' || to_char(date_debut, 'DD/MM/YYYY') || ' au ' || to_char(date_fin, 'DD/MM/YYYY')
+  from   public.exercices
+  where  statut = 'clos' and p_date between date_debut and date_fin
+  limit  1;
 $function$;
 
 CREATE OR REPLACE FUNCTION public.facturer_echeance(p_echeance uuid)
@@ -5267,6 +5661,189 @@ AS $function$
 
   union all
 
+  -- ---- INVENTAIRE : régularisations de clôture ----
+  -- Une charge constatée d'avance sort de la charge (486), une facture
+  -- non parvenue y entre (408, TVA en attente au 44586) ; de même pour
+  -- les produits (487, 418, 44587). L'impôt sur les sociétés : 695 / 444.
+  -- La date de validation ne précède jamais celle de l'écriture.
+  select 'IN', 'Inventaire',
+         coalesce(p.numero_piece, p.id::text), p.date_piece,
+         p.compte,
+         coalesce((select c.libelle from public.categories c
+                   where c.compte = p.compte order by c.ordre limit 1),
+                  case when p.origine = 'is' then 'Impôts sur les bénéfices'
+                       else 'Régularisation' end),
+         null, null,
+         coalesce(p.numero_piece, '—'), p.date_piece,
+         left(coalesce(p.objet, p.tiers_libelle), 200),
+         case when p.origine in ('fnp', 'pca', 'is') then p.montant_ht else 0 end,
+         case when p.origine in ('cca', 'par') then p.montant_ht else 0 end,
+         greatest(coalesce(p.valide_le::date, p.date_piece), p.date_piece), 1
+  from   ecr p
+  where  p.nature = 'inventaire'
+    and  p.date_piece between p_debut and p_fin
+
+  union all
+
+  select 'IN', 'Inventaire',
+         coalesce(p.numero_piece, p.id::text), p.date_piece,
+         case p.origine when 'cca' then '486' when 'fnp' then '408'
+                        when 'pca' then '487' when 'par' then '418' else '444' end,
+         case p.origine when 'cca' then 'Charges constatées d''avance'
+                        when 'fnp' then 'Fournisseurs — factures non parvenues'
+                        when 'pca' then 'Produits constatés d''avance'
+                        when 'par' then 'Clients — factures à établir'
+                        else 'État — impôt sur les bénéfices' end,
+         null, null,
+         coalesce(p.numero_piece, '—'), p.date_piece,
+         left(coalesce(p.objet, p.tiers_libelle), 200),
+         case when p.origine in ('cca', 'par') then p.montant_ttc else 0 end,
+         case when p.origine in ('fnp', 'pca', 'is') then p.montant_ttc else 0 end,
+         greatest(coalesce(p.valide_le::date, p.date_piece), p.date_piece), 2
+  from   ecr p
+  where  p.nature = 'inventaire'
+    and  p.date_piece between p_debut and p_fin
+
+  union all
+
+  select 'IN', 'Inventaire',
+         coalesce(p.numero_piece, p.id::text), p.date_piece,
+         case when p.origine = 'fnp' then '44586' else '44587' end,
+         case when p.origine = 'fnp' then 'TVA sur factures non parvenues'
+              else 'TVA sur factures à établir' end,
+         null, null,
+         coalesce(p.numero_piece, '—'), p.date_piece,
+         'TVA — ' || left(coalesce(p.objet, p.tiers_libelle), 180),
+         case when p.origine = 'fnp' then p.montant_tva else 0 end,
+         case when p.origine = 'par' then p.montant_tva else 0 end,
+         greatest(coalesce(p.valide_le::date, p.date_piece), p.date_piece), 3
+  from   ecr p
+  where  p.nature = 'inventaire' and p.origine in ('fnp', 'par') and p.montant_tva > 0
+    and  p.date_piece between p_debut and p_fin
+
+  union all
+
+  -- ---- INVENTAIRE : extourne au premier jour de l'exercice suivant ----
+  -- La régularisation s'annule le lendemain de la clôture : la facture,
+  -- ou la charge, arrive alors normalement dans le nouvel exercice.
+  select 'IN', 'Inventaire',
+         coalesce(p.numero_piece, p.id::text) || '-EXT', p.date_piece + 1,
+         p.compte,
+         coalesce((select c.libelle from public.categories c
+                   where c.compte = p.compte order by c.ordre limit 1), 'Régularisation'),
+         null, null,
+         coalesce(p.numero_piece, '—'), p.date_piece + 1,
+         'Extourne — ' || left(coalesce(p.objet, p.tiers_libelle), 185),
+         case when p.origine in ('cca', 'par') then p.montant_ht else 0 end,
+         case when p.origine in ('fnp', 'pca') then p.montant_ht else 0 end,
+         greatest(coalesce(p.valide_le::date, p.date_piece + 1), p.date_piece + 1), 1
+  from   ecr p
+  where  p.nature = 'inventaire' and p.origine in ('cca', 'fnp', 'pca', 'par')
+    and  p.date_piece + 1 between p_debut and p_fin
+
+  union all
+
+  select 'IN', 'Inventaire',
+         coalesce(p.numero_piece, p.id::text) || '-EXT', p.date_piece + 1,
+         case p.origine when 'cca' then '486' when 'fnp' then '408'
+                        when 'pca' then '487' else '418' end,
+         case p.origine when 'cca' then 'Charges constatées d''avance'
+                        when 'fnp' then 'Fournisseurs — factures non parvenues'
+                        when 'pca' then 'Produits constatés d''avance'
+                        else 'Clients — factures à établir' end,
+         null, null,
+         coalesce(p.numero_piece, '—'), p.date_piece + 1,
+         'Extourne — ' || left(coalesce(p.objet, p.tiers_libelle), 185),
+         case when p.origine in ('fnp', 'pca') then p.montant_ttc else 0 end,
+         case when p.origine in ('cca', 'par') then p.montant_ttc else 0 end,
+         greatest(coalesce(p.valide_le::date, p.date_piece + 1), p.date_piece + 1), 2
+  from   ecr p
+  where  p.nature = 'inventaire' and p.origine in ('cca', 'fnp', 'pca', 'par')
+    and  p.date_piece + 1 between p_debut and p_fin
+
+  union all
+
+  select 'IN', 'Inventaire',
+         coalesce(p.numero_piece, p.id::text) || '-EXT', p.date_piece + 1,
+         case when p.origine = 'fnp' then '44586' else '44587' end,
+         case when p.origine = 'fnp' then 'TVA sur factures non parvenues'
+              else 'TVA sur factures à établir' end,
+         null, null,
+         coalesce(p.numero_piece, '—'), p.date_piece + 1,
+         'Extourne TVA — ' || left(coalesce(p.objet, p.tiers_libelle), 180),
+         case when p.origine = 'par' then p.montant_tva else 0 end,
+         case when p.origine = 'fnp' then p.montant_tva else 0 end,
+         greatest(coalesce(p.valide_le::date, p.date_piece + 1), p.date_piece + 1), 3
+  from   ecr p
+  where  p.nature = 'inventaire' and p.origine in ('fnp', 'par') and p.montant_tva > 0
+    and  p.date_piece + 1 between p_debut and p_fin
+
+  union all
+
+  -- ---- DOTATIONS AUX AMORTISSEMENTS ----
+  -- Charge calculée, sans décaissement : 6811 contre 281. La pièce
+  -- regroupe les immobilisations de la période ; le détail est au
+  -- registre des immobilisations.
+  select 'IN', 'Inventaire',
+         coalesce(p.numero_piece, p.id::text), p.date_ecriture,
+         coalesce(p.compte, '6811'), 'Dotations aux amortissements',
+         null, null,
+         coalesce(p.numero_piece, '—'), p.date_piece,
+         left(coalesce(p.objet, 'Dotation aux amortissements'), 200),
+         p.montant_ht, 0,
+         greatest(coalesce(p.valide_le::date, p.date_ecriture), p.date_ecriture), 1
+  from   ecr p
+  where  p.nature = 'amortissement' and p.date_ecriture between p_debut and p_fin
+
+  union all
+
+  select 'IN', 'Inventaire',
+         coalesce(p.numero_piece, p.id::text), p.date_ecriture,
+         '281', 'Amortissements des immobilisations corporelles',
+         null, null,
+         coalesce(p.numero_piece, '—'), p.date_piece,
+         left(coalesce(p.objet, 'Dotation aux amortissements'), 200),
+         0, p.montant_ht,
+         greatest(coalesce(p.valide_le::date, p.date_ecriture), p.date_ecriture), 2
+  from   ecr p
+  where  p.nature = 'amortissement' and p.date_ecriture between p_debut and p_fin
+
+  union all
+
+  -- ---- À-NOUVEAUX ----
+  -- Au premier jour d'un exercice qui en suit un autre : les soldes des
+  -- comptes de bilan (classes 1 à 5), puis le résultat des exercices
+  -- précédents en report à nouveau (110 créditeur, 119 débiteur), en
+  -- attendant la décision d'affectation des associés.
+  select 'AN', 'À-nouveaux',
+         'AN-' || to_char(p_debut, 'YYYYMMDD'), p_debut,
+         s.compte_num, s.compte_lib, s.comp_aux_num, s.comp_aux_lib,
+         'AN', p_debut,
+         'Reprise des soldes au ' || to_char(p_debut, 'DD/MM/YYYY'),
+         greatest(s.solde, 0), greatest(-s.solde, 0),
+         p_debut, 1
+  from   public.soldes_a_nouveau(p_debut) s
+  where  left(s.compte_num, 1) in ('1', '2', '3', '4', '5')
+    and  abs(s.solde) > 0.005
+
+  union all
+
+  select 'AN', 'À-nouveaux',
+         'AN-' || to_char(p_debut, 'YYYYMMDD'), p_debut,
+         case when sum(s.solde) <= 0 then '110' else '119' end,
+         case when sum(s.solde) <= 0 then 'Report à nouveau (solde créditeur)'
+              else 'Report à nouveau (solde débiteur)' end,
+         null, null,
+         'AN', p_debut,
+         'Résultat des exercices antérieurs',
+         greatest(sum(s.solde), 0), greatest(-sum(s.solde), 0),
+         p_debut, 2
+  from   public.soldes_a_nouveau(p_debut) s
+  where  left(s.compte_num, 1) in ('6', '7')
+  having abs(sum(s.solde)) > 0.005
+
+  union all
+
   -- ---- OPÉRATIONS DIVERSES ----
   select 'OD', 'Opérations diverses',
          coalesce(p.numero_piece, p.id::text), p.date_ecriture,
@@ -5986,6 +6563,9 @@ AS $function$
     -- Le devis a sa propre séquence. S'il devait passer par ici, il ne
     -- doit surtout pas emprunter celle des achats.
     when 'devis'    then 'DEV'
+    -- Les écritures de clôture ont chacune la leur.
+    when 'inventaire'    then 'INV'
+    when 'amortissement' then 'DOT'
     when 'achat'    then case when p_origine = 'abonnement' then 'ABO' else 'ACH' end
     else 'ACH'
   end;
@@ -6768,6 +7348,89 @@ begin
 end;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.resultat_comptable(p_debut date, p_fin date)
+ RETURNS TABLE(produits numeric, charges numeric, impot numeric, amendes numeric, tvs numeric)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select coalesce(sum(credit - debit) filter (where left(compte_num, 1) = '7'), 0),
+         coalesce(sum(debit - credit) filter (where left(compte_num, 1) = '6'
+                                              and compte_num not like '695%'), 0),
+         coalesce(sum(debit - credit) filter (where compte_num like '695%'), 0),
+         coalesce(sum(debit - credit) filter (where compte_num like '6712%'), 0),
+         coalesce(sum(debit - credit) filter (where compte_num like '63512%'), 0)
+  from   public.lignes_fec(p_debut, p_fin);
+$function$;
+
+CREATE OR REPLACE FUNCTION public.resultat_fiscal(p_exercice uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  e          record;
+  r          record;
+  a          record;
+  v_stock    numeric := 0;
+  v_rf       numeric;
+  v_avant    numeric;
+  v_fiscal   numeric;
+  v_impute   numeric;
+  v_base     numeric;
+  v_jours    integer;
+  v_plafond  numeric;
+  v_reduit   numeric;
+  v_capital  numeric;
+  v_libere   numeric;
+  v_eligible boolean;
+begin
+  select * into e from public.exercices where id = p_exercice;
+  if not found then raise exception 'Exercice introuvable'; end if;
+
+  -- Déficits des exercices précédents, imputés dans l'ordre.
+  for a in select * from public.exercices where date_fin < e.date_debut order by date_debut loop
+    select * into r from public.resultat_comptable(a.date_debut, a.date_fin);
+    v_rf := r.produits - r.charges + r.amendes + r.tvs;
+    v_stock := v_stock + greatest(-v_rf, 0) - least(v_stock, greatest(v_rf, 0));
+  end loop;
+
+  select * into r from public.resultat_comptable(e.date_debut, e.date_fin);
+  v_avant  := r.produits - r.charges;
+  v_fiscal := round(v_avant + r.amendes + r.tvs);
+  v_impute := least(v_stock, greatest(v_fiscal, 0));
+  v_base   := greatest(v_fiscal - v_impute, 0);
+
+  v_jours   := e.date_fin - e.date_debut + 1;
+  v_plafond := round(42500 * v_jours / 365.0);
+  select coalesce(sum(capital_souscrit), 0), coalesce(sum(capital_libere), 0)
+  into   v_capital, v_libere
+  from   public.associes where actif;
+  v_eligible := v_capital > 0 and v_libere >= v_capital;
+  v_reduit   := case when v_eligible then least(v_base, v_plafond) else 0 end;
+
+  return jsonb_build_object(
+    'debut', e.date_debut, 'fin', e.date_fin, 'jours', v_jours,
+    'produits', r.produits, 'charges', r.charges,
+    'is_comptabilise', r.impot,
+    'resultat_avant_is', v_avant,
+    'resultat_comptable', v_avant - r.impot,
+    'reintegrations', jsonb_build_object('amendes', r.amendes, 'tvs', r.tvs,
+                                         'impot', r.impot),
+    'resultat_fiscal', v_fiscal,
+    'deficits_anterieurs', v_stock,
+    'deficit_impute', v_impute,
+    'deficit_reportable', greatest(v_stock - v_impute, 0) + greatest(-v_fiscal, 0),
+    'base_imposable', v_base,
+    'taux_reduit_applicable', v_eligible,
+    'plafond_taux_reduit', v_plafond,
+    'base_taux_reduit', v_reduit,
+    'base_taux_normal', v_base - v_reduit,
+    'impot', round(v_reduit * 0.15 + (v_base - v_reduit) * 0.25));
+end;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.retirer_justificatif(p_justificatif uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -6898,6 +7561,42 @@ CREATE OR REPLACE FUNCTION public.role_courant()
  SET search_path TO 'public'
 AS $function$
   select role from public.profils where id = auth.uid() and actif = true;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.rouvrir_exercice(p_exercice uuid, p_motif text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  e record;
+begin
+  if auth.uid() is not null and not public.a_permission('tva', 'validate') then
+    raise exception 'Seul le propriétaire rouvre un exercice';
+  end if;
+  select * into e from public.exercices where id = p_exercice for update;
+  if not found then raise exception 'Exercice introuvable'; end if;
+  if e.statut <> 'clos' then raise exception 'Cet exercice n''est pas clos'; end if;
+  if trim(coalesce(p_motif, '')) = '' then
+    raise exception 'Un motif est obligatoire : il reste au journal d''audit.';
+  end if;
+  if exists (select 1 from public.exercices where date_debut > e.date_fin and statut = 'clos') then
+    raise exception 'Rouvrez d''abord l''exercice suivant.';
+  end if;
+
+  update public.exercices
+  set    statut = 'ouvert', cloture_le = null, cloture_par = null
+  where  id = p_exercice;
+
+  perform public.journaliser(
+    'reouverture', 'exercices', p_exercice::text,
+    jsonb_build_object('resume', 'Exercice du ' || to_char(e.date_debut, 'DD/MM/YYYY')
+                                 || ' au ' || to_char(e.date_fin, 'DD/MM/YYYY') || ' rouvert',
+                       'motif', trim(p_motif)));
+
+  return jsonb_build_object('id', p_exercice, 'statut', 'ouvert');
+end;
 $function$;
 
 CREATE OR REPLACE FUNCTION public.sauter_echeance(p_echeance uuid, p_motif text)
@@ -7330,6 +8029,29 @@ AS $function$
   where statut_qonto = 'completed';
 $function$;
 
+CREATE OR REPLACE FUNCTION public.soldes_a_nouveau(p_debut date)
+ RETURNS TABLE(compte_num text, compte_lib text, comp_aux_num text, comp_aux_lib text, solde numeric)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_origine date;
+begin
+  select min(date_debut) into v_origine from public.exercices;
+  if v_origine is null or p_debut <= v_origine
+     or not exists (select 1 from public.exercices where date_debut = p_debut) then
+    return;
+  end if;
+
+  return query
+    select a.compte_num, max(a.compte_lib), a.comp_aux_num, max(a.comp_aux_lib),
+           round(sum(a.debit - a.credit), 2)
+    from   public.lignes_fec(v_origine, p_debut - 1) a
+    group  by a.compte_num, a.comp_aux_num;
+end;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.statistiques_donnees()
  RETURNS jsonb
  LANGUAGE sql
@@ -7676,7 +8398,9 @@ begin
   -- de contrôle.
   select coalesce(sum(debit - credit), 0) into v_classe6
   from   public.lignes_fec(e.date_debut, e.date_fin)
-  where  left(compte_num, 1) = '6';
+  where  left(compte_num, 1) = '6'
+    -- Les écritures de clôture ne sont pas des pièces : hors du rapprochement.
+    and  journal_code not in ('IN', 'AN');
 
   v_controles := jsonb_build_array(
     jsonb_build_object(
@@ -7934,6 +8658,90 @@ begin
   end if;
 
   return new;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.verrou_exercice_pieces()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_ex text;
+begin
+  -- Les tâches automatiques (synchronisation, sauvegarde) passent.
+  if auth.uid() is null then
+    return coalesce(new, old);
+  end if;
+
+  -- Rien de ce que lit le journal n'a changé : la modification passe
+  -- (notes, justificatif, montant réglé par un paiement ultérieur…).
+  if tg_op = 'UPDATE'
+     and (old.etat, old.nature, old.sens, old.origine, old.date_piece, old.compte,
+          old.categorie_id, old.montant_ht, old.montant_tva, old.montant_ttc,
+          old.tva_comptable, old.taux_tva, old.regime_tva, old.type_operation,
+          old.tva_autoliquidee, old.acomptes_deduits, old.moyen_paiement, old.paye_par,
+          old.tiers_libelle, old.periode_debut, old.periode_fin)
+         is not distinct from
+         (new.etat, new.nature, new.sens, new.origine, new.date_piece, new.compte,
+          new.categorie_id, new.montant_ht, new.montant_tva, new.montant_ttc,
+          new.tva_comptable, new.taux_tva, new.regime_tva, new.type_operation,
+          new.tva_autoliquidee, new.acomptes_deduits, new.moyen_paiement, new.paye_par,
+          new.tiers_libelle, new.periode_debut, new.periode_fin) then
+    return new;
+  end if;
+
+  if tg_op in ('UPDATE', 'DELETE') and old.etat = 'validee' then
+    v_ex := public.exercice_clos(public.date_ecriture(old.nature, old.date_piece));
+  end if;
+  if v_ex is null and tg_op in ('INSERT', 'UPDATE') and new.etat = 'validee' then
+    v_ex := public.exercice_clos(public.date_ecriture(new.nature, new.date_piece));
+  end if;
+
+  if v_ex is not null then
+    raise exception
+      'L''exercice % est clos : ses écritures ne changent plus. Enregistrez la correction '
+      'dans l''exercice en cours, ou rouvrez l''exercice (Comptabilité → Clôture) s''il '
+      'n''est pas encore déclaré.', v_ex;
+  end if;
+  return coalesce(new, old);
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.verrou_exercice_reglements()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_ex text;
+begin
+  if auth.uid() is null then
+    return coalesce(new, old);
+  end if;
+
+  -- Rattacher le règlement à l'opération bancaire ne change pas le journal.
+  if tg_op = 'UPDATE'
+     and (old.piece_id, old.date_reglement, old.montant, old.moyen)
+         is not distinct from (new.piece_id, new.date_reglement, new.montant, new.moyen) then
+    return new;
+  end if;
+
+  if tg_op in ('UPDATE', 'DELETE') then
+    v_ex := public.exercice_clos(old.date_reglement);
+  end if;
+  if v_ex is null and tg_op in ('INSERT', 'UPDATE') then
+    v_ex := public.exercice_clos(new.date_reglement);
+  end if;
+
+  if v_ex is not null then
+    raise exception
+      'L''exercice % est clos : un règlement daté de cet exercice ne s''ajoute, ne se '
+      'modifie ni ne se supprime plus. Datez-le dans l''exercice en cours.', v_ex;
+  end if;
+  return coalesce(new, old);
 end;
 $function$;
 
@@ -8494,9 +9302,11 @@ CREATE TRIGGER trg_tiers_client AFTER INSERT OR UPDATE ON public.clients FOR EAC
 CREATE TRIGGER trg_piece_deplacements BEFORE INSERT ON public.deplacements FOR EACH ROW EXECUTE FUNCTION attribuer_numero_piece();
 CREATE TRIGGER trg_rerouter_justificatif BEFORE INSERT ON public.justificatifs FOR EACH ROW EXECUTE FUNCTION rerouter_justificatif();
 CREATE TRIGGER trg_verifier_payeur BEFORE INSERT OR UPDATE OF paye_par ON public.pieces FOR EACH ROW EXECUTE FUNCTION verifier_payeur();
+CREATE TRIGGER trg_verrou_exercice BEFORE INSERT OR DELETE OR UPDATE ON public.pieces FOR EACH ROW EXECUTE FUNCTION verrou_exercice_pieces();
 CREATE TRIGGER trg_verrou_tva BEFORE INSERT OR DELETE OR UPDATE ON public.pieces FOR EACH ROW EXECUTE FUNCTION verrou_tva_pieces();
 CREATE TRIGGER trg_recalculer_piece AFTER INSERT OR DELETE OR UPDATE ON public.pieces_lignes FOR EACH ROW EXECUTE FUNCTION recalculer_piece();
 CREATE TRIGGER trg_reglements AFTER INSERT OR DELETE OR UPDATE ON public.reglements FOR EACH ROW EXECUTE FUNCTION recalculer_reglements();
+CREATE TRIGGER trg_verrou_exercice BEFORE INSERT OR DELETE OR UPDATE ON public.reglements FOR EACH ROW EXECUTE FUNCTION verrou_exercice_reglements();
 CREATE TRIGGER trg_verrou_tva BEFORE INSERT OR DELETE OR UPDATE ON public.reglements FOR EACH ROW EXECUTE FUNCTION verrou_tva_reglements();
 CREATE TRIGGER trg_ecarter_empreintes BEFORE INSERT OR UPDATE OF montant, statut_qonto ON public.transactions_qonto FOR EACH ROW EXECUTE FUNCTION ecarter_empreintes();
 CREATE TRIGGER trg_piece_transactions BEFORE INSERT ON public.transactions_qonto FOR EACH ROW EXECUTE FUNCTION attribuer_numero_transaction();
@@ -8525,6 +9335,7 @@ alter table public.immobilisations enable row level security;
 alter table public.justificatifs enable row level security;
 alter table public.libelles_bancaires enable row level security;
 alter table public.obligations enable row level security;
+alter table public.obligations_suivi enable row level security;
 alter table public.permissions enable row level security;
 alter table public.pieces enable row level security;
 alter table public.pieces_lignes enable row level security;
@@ -8646,6 +9457,11 @@ create policy "obligations_ecriture" on public.obligations as permissive for all
   with check (a_permission('echeances'::text, 'update'::text));
 create policy "obligations_lecture" on public.obligations as permissive for select to public
   using (a_permission('echeances'::text, 'read'::text));
+create policy "obligations_suivi_ecriture" on public.obligations_suivi as permissive for all to authenticated
+  using (a_permission('tva'::text, 'validate'::text))
+  with check (a_permission('tva'::text, 'validate'::text));
+create policy "obligations_suivi_lecture" on public.obligations_suivi as permissive for select to authenticated
+  using (a_permission('tva'::text, 'read'::text));
 create policy "permissions_lecture" on public.permissions as permissive for select to public
   using ((auth.uid() IS NOT NULL));
 create policy "pieces_lecture" on public.pieces as permissive for select to authenticated
@@ -8762,6 +9578,8 @@ grant DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE on
 grant DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE on public.libelles_bancaires to service_role;
 grant DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE on public.obligations to authenticated;
 grant DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE on public.obligations to service_role;
+grant DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE on public.obligations_suivi to authenticated;
+grant DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE on public.obligations_suivi to service_role;
 grant DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE on public.permissions to authenticated;
 grant DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE on public.permissions to service_role;
 grant DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE on public.pieces to authenticated;
@@ -8862,10 +9680,14 @@ grant execute on function charge_comptable(text,numeric,numeric,numeric) to auth
 grant execute on function charge_comptable(text,numeric,numeric,numeric) to service_role;
 grant execute on function chercher_doublon(text,text,numeric,date) to authenticated;
 grant execute on function chercher_doublon(text,text,numeric,date) to service_role;
+grant execute on function cloturer_exercice(uuid) to authenticated;
+grant execute on function cloturer_exercice(uuid) to service_role;
 grant execute on function cloturer_tva(date,date,date,text,text) to authenticated;
 grant execute on function cloturer_tva(date,date,date,text,text) to service_role;
 grant execute on function completer_tiers(uuid,text,text) to authenticated;
 grant execute on function completer_tiers(uuid,text,text) to service_role;
+grant execute on function comptabiliser_is(uuid) to authenticated;
+grant execute on function comptabiliser_is(uuid) to service_role;
 grant execute on function confirmer_appariement(uuid,uuid,boolean) to authenticated;
 grant execute on function confirmer_appariement(uuid,uuid,boolean) to service_role;
 grant execute on function confirmer_rapprochement(uuid,uuid) to authenticated;
@@ -8886,6 +9708,8 @@ grant execute on function creer_depense(date,text,uuid,numeric,numeric,text,text
 grant execute on function creer_depense(date,text,uuid,numeric,numeric,text,text,text,uuid,text,text,text,text,boolean,numeric,numeric,text) to service_role;
 grant execute on function creer_devis(uuid,text,date,integer,text) to authenticated;
 grant execute on function creer_devis(uuid,text,date,integer,text) to service_role;
+grant execute on function creer_ecriture_inventaire(text,uuid,text,text,numeric,numeric,text) to authenticated;
+grant execute on function creer_ecriture_inventaire(text,uuid,text,text,numeric,numeric,text) to service_role;
 grant execute on function creer_facture(uuid,text,uuid,uuid,date,text,smallint,text) to authenticated;
 grant execute on function creer_facture(uuid,text,uuid,uuid,date,text,smallint,text) to service_role;
 grant execute on function creer_operation_banque(uuid,text,text,text,text) to authenticated;
@@ -8936,6 +9760,8 @@ grant execute on function est_immobilisation(text) to authenticated;
 grant execute on function est_immobilisation(text) to service_role;
 grant execute on function etat_achats() to authenticated;
 grant execute on function etat_achats() to service_role;
+grant execute on function etat_cloture(uuid) to authenticated;
+grant execute on function etat_cloture(uuid) to service_role;
 grant execute on function etat_coffre() to authenticated;
 grant execute on function etat_coffre() to service_role;
 grant execute on function etat_contrats() to authenticated;
@@ -8946,6 +9772,10 @@ grant execute on function etat_immobilisations() to authenticated;
 grant execute on function etat_immobilisations() to service_role;
 grant execute on function etat_ventes() to authenticated;
 grant execute on function etat_ventes() to service_role;
+grant execute on function etats_financiers(uuid) to authenticated;
+grant execute on function etats_financiers(uuid) to service_role;
+grant execute on function exercice_clos(date) to authenticated;
+grant execute on function exercice_clos(date) to service_role;
 grant execute on function facturer_echeance(uuid) to authenticated;
 grant execute on function facturer_echeance(uuid) to service_role;
 grant execute on function fusionner_tiers(uuid,uuid,text) to authenticated;
@@ -9057,6 +9887,10 @@ grant execute on function rerouter_justificatif() to authenticated;
 grant execute on function rerouter_justificatif() to service_role;
 grant execute on function resilier_abonnement(uuid,date,text) to authenticated;
 grant execute on function resilier_abonnement(uuid,date,text) to service_role;
+grant execute on function resultat_comptable(date,date) to authenticated;
+grant execute on function resultat_comptable(date,date) to service_role;
+grant execute on function resultat_fiscal(uuid) to authenticated;
+grant execute on function resultat_fiscal(uuid) to service_role;
 grant execute on function retirer_justificatif(uuid,text) to authenticated;
 grant execute on function retirer_justificatif(uuid,text) to service_role;
 grant execute on function retirer_justificatif(uuid) to authenticated;
@@ -9065,6 +9899,8 @@ grant execute on function retirer_ligne(uuid) to authenticated;
 grant execute on function retirer_ligne(uuid) to service_role;
 grant execute on function role_courant() to authenticated;
 grant execute on function role_courant() to service_role;
+grant execute on function rouvrir_exercice(uuid,text) to authenticated;
+grant execute on function rouvrir_exercice(uuid,text) to service_role;
 grant execute on function sauter_echeance(uuid,text) to authenticated;
 grant execute on function sauter_echeance(uuid,text) to service_role;
 grant execute on function schema_public() to service_role;
@@ -9080,6 +9916,8 @@ grant execute on function solde_controle() to authenticated;
 grant execute on function solde_controle() to service_role;
 grant execute on function solde_reconstitue() to authenticated;
 grant execute on function solde_reconstitue() to service_role;
+grant execute on function soldes_a_nouveau(date) to authenticated;
+grant execute on function soldes_a_nouveau(date) to service_role;
 grant execute on function statistiques_donnees() to authenticated;
 grant execute on function statistiques_donnees() to service_role;
 grant execute on function suivi_tva() to authenticated;
@@ -9105,6 +9943,10 @@ grant execute on function valider_piece(uuid) to authenticated;
 grant execute on function valider_piece(uuid) to service_role;
 grant execute on function verifier_payeur() to authenticated;
 grant execute on function verifier_payeur() to service_role;
+grant execute on function verrou_exercice_pieces() to authenticated;
+grant execute on function verrou_exercice_pieces() to service_role;
+grant execute on function verrou_exercice_reglements() to authenticated;
+grant execute on function verrou_exercice_reglements() to service_role;
 grant execute on function verrou_tva_pieces() to authenticated;
 grant execute on function verrou_tva_pieces() to service_role;
 grant execute on function verrou_tva_reglements() to authenticated;

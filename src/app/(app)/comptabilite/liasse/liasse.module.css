@@ -1,0 +1,91 @@
+.formulaire {
+  margin-bottom: 1.5rem;
+}
+
+.entete {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: .6rem;
+}
+
+.numero {
+  font-family: monospace;
+  font-size: var(--fs-xs);
+  color: var(--g-500);
+}
+
+.table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.table th {
+  text-align: left;
+  padding: .45rem .4rem;
+  color: var(--g-500);
+  font-weight: 500;
+  border-bottom: 1px solid var(--g-300);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: .4rem;
+  border-bottom: 1px solid var(--g-200);
+  vertical-align: top;
+}
+
+.code {
+  font-family: monospace;
+  font-size: .78rem;
+  background: var(--bone);
+  border: 1px solid var(--g-300);
+  border-radius: 3px;
+  padding: 0 .3rem;
+  white-space: nowrap;
+}
+
+.montant {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.zero {
+  color: var(--g-400);
+}
+
+.total td {
+  font-weight: 600;
+  background: var(--bone);
+}
+
+.dont td:nth-child(2) {
+  padding-left: 1.4rem;
+  color: var(--g-500);
+}
+
+.comptes {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--g-500);
+  font-weight: 400;
+}
+
+.note {
+  font-size: var(--fs-xs);
+  color: var(--g-500);
+  line-height: 1.5;
+  margin-top: .6rem;
+  max-width: 80ch;
+}
+
+@media print {
+  .formulaire {
+    break-inside: avoid;
+  }
+}

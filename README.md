@@ -43,7 +43,7 @@ lisent cette seule liste) :
 | Ventes | Factures, avoirs, devis, relances |
 | Tiers | Clients et fournisseurs |
 | TVA | Suivi et déclarations |
-| Comptabilité | Journal, exports et FEC, rapports mensuels, associés, immobilisations, échéances |
+| Comptabilité | Journal, exports et FEC, rapports mensuels, associés, immobilisations, échéances, clôture (calendrier des obligations, écritures de fin d'exercice, impôt, verrou), liasse (2033-A à G, 2065, CA12E case par case) |
 | Réglages | Mon compte (double authentification), entreprise, utilisateurs, catégories, prestations, véhicules, documents, audit, sauvegardes |
 
 ## La base de données

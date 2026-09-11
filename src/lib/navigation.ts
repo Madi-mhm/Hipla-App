@@ -85,6 +85,8 @@ export const SECTIONS: Section[] = [
       { href: '/comptabilite/immobilisations', libelle: 'Immobilisations',
         droit: { module: 'depenses' } },
       { href: '/comptabilite/echeances', libelle: 'Échéances', droit: { module: 'echeances' } },
+      { href: '/comptabilite/cloture', libelle: 'Clôture' },
+      { href: '/comptabilite/liasse', libelle: 'Liasse' },
     ],
   },
   {
