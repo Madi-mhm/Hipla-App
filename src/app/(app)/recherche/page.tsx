@@ -5,7 +5,7 @@ import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import Recherche from './Recherche';
 
-export const metadata = { title: 'Recherche — Hipla Gestion' };
+export const metadata = { title: 'Recherche — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 /**

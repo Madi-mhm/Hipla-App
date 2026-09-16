@@ -169,7 +169,7 @@ export function documentFacture(m: ModeleFacture) {
       title={`${intituleDocument(m.nature)} ${m.numero ?? 'brouillon'}`}
       author={e.raisonSociale}
       subject={m.objet ?? undefined}
-      creator="Hipla Gestion"
+      creator="Hipla Compta"
     >
       <Page size="A4" style={s.page}>
 

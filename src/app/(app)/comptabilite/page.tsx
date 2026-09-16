@@ -8,7 +8,7 @@ import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import { money, dateLong } from '@/lib/format';
 
-export const metadata = { title: 'Journal comptable — Hipla Gestion' };
+export const metadata = { title: 'Journal comptable — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 /**

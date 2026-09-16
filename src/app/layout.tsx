@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import '@/styles/globals.css';
 
 export const metadata: Metadata = {
-  title: 'Hipla Gestion',
+  title: 'Hipla Compta',
   description: "Application de gestion interne de Hipla Services SAS.",
   robots: { index: false, follow: false, nocache: true },
 };

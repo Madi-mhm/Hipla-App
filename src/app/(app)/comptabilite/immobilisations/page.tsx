@@ -7,7 +7,7 @@ import { peut } from '@/lib/permissions';
 import { money } from '@/lib/format';
 import Immobilisations, { type Bien, type AInscrire } from './Immobilisations';
 
-export const metadata = { title: 'Immobilisations — Hipla Gestion' };
+export const metadata = { title: 'Immobilisations — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 /**

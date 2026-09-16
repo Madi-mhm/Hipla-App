@@ -5,7 +5,7 @@ import { peut } from '@/lib/permissions';
 import { redirect } from 'next/navigation';
 import GestionUtilisateurs, { type Compte } from './GestionUtilisateurs';
 
-export const metadata = { title: 'Utilisateurs — Hipla Gestion' };
+export const metadata = { title: 'Utilisateurs — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {

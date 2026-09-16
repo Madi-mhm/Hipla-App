@@ -6,7 +6,7 @@ import { peut } from '@/lib/permissions';
 import Echeancier from '@/components/Echeancier';
 import { type Groupes, sansRecurrences } from '@/lib/echeances';
 
-export const metadata = { title: 'Échéances — Hipla Gestion' };
+export const metadata = { title: 'Échéances — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 /**

@@ -4,7 +4,7 @@ import { profilCourant } from '@/lib/auth';
 import { LIBELLE_ROLE } from '@/lib/permissions';
 import MonCompte from './MonCompte';
 
-export const metadata = { title: 'Mon compte — Hipla Gestion' };
+export const metadata = { title: 'Mon compte — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {

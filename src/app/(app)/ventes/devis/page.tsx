@@ -5,7 +5,7 @@ import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import ListeDevis, { type LigneDevis, type ClientDevis } from './ListeDevis';
 
-export const metadata = { title: 'Devis — Hipla Gestion' };
+export const metadata = { title: 'Devis — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 /**

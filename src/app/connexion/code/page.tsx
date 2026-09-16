@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import CodeConnexion from './CodeConnexion';
 import styles from '../connexion.module.css';
 
-export const metadata = { title: 'Code de connexion — Hipla Gestion' };
+export const metadata = { title: 'Code de connexion — Hipla Compta' };
 
 /** Deuxième étape de la connexion, pour un compte en double authentification. */
 export default function Page() {

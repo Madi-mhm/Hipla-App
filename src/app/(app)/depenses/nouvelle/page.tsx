@@ -8,7 +8,7 @@ import Extraction from './Extraction';
 import FormulaireDepense, { type ValeursInitiales, type FournisseurConnu } from './FormulaireDepense';
 import type { Categorie } from '@/lib/types';
 
-export const metadata = { title: 'Nouvelle dépense — Hipla Gestion' };
+export const metadata = { title: 'Nouvelle dépense — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 /**

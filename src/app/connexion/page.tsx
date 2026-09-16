@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import ForumConnexion from './ForumConnexion';
 import styles from './connexion.module.css';
 
-export const metadata = { title: 'Connexion — Hipla Gestion' };
+export const metadata = { title: 'Connexion — Hipla Compta' };
 
 /**
  * useSearchParams() bascule le rendu côté client. Sans limite de Suspense,

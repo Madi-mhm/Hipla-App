@@ -1,4 +1,4 @@
-# Hipla Gestion — app.hipla.fr
+# Hipla Compta — app.hipla.fr
 
 Application de gestion et de comptabilité de **Hipla Services SAS**.
 Next.js 15 + Supabase (PostgreSQL), hébergée sur Vercel.

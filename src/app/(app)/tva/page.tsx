@@ -5,7 +5,7 @@ import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import SuiviTva, { type Suivi } from './SuiviTva';
 
-export const metadata = { title: 'TVA — Hipla Gestion' };
+export const metadata = { title: 'TVA — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {

@@ -13,7 +13,7 @@ import Ca12, { type DeclarationTva } from './Ca12';
 import Imprimer from './Imprimer';
 import s from './liasse.module.css';
 
-export const metadata = { title: 'Liasse — Hipla Gestion' };
+export const metadata = { title: 'Liasse — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 /**
@@ -186,7 +186,7 @@ export default async function Page(
               <tr><td>Exercice ouvert le / clos le</td><td>{date(exercice.date_debut)} — {date(exercice.date_fin)}</td></tr>
               <tr><td>Durée de l&apos;exercice en nombre de mois</td><td>{dureeEnMois(exercice.date_debut, exercice.date_fin)}</td></tr>
               <tr><td>Régime</td><td>Régime simplifié d&apos;imposition (2065 : case « Régime simplifié »)</td></tr>
-              <tr><td>Comptabilité informatisée (2065, cadre F)</td><td>Oui — Hipla Gestion, application interne</td></tr>
+              <tr><td>Comptabilité informatisée (2065, cadre F)</td><td>Oui — Hipla Compta, application interne</td></tr>
             </tbody>
           </table>
         </section>

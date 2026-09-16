@@ -10,7 +10,7 @@ import { LIBELLE_STATUT, CLASSE_STATUT } from '@/lib/types';
 import { statutSaisie } from '@/lib/registre';
 import ActionsValidation from '@/components/ActionsValidation';
 
-export const metadata = { title: 'Dépenses — Hipla Gestion' };
+export const metadata = { title: 'Dépenses — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 /**

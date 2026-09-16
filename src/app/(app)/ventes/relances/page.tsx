@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 
-export const metadata = { title: 'Relances — Hipla Gestion' };
+export const metadata = { title: 'Relances — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {

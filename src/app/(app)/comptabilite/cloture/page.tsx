@@ -11,7 +11,7 @@ import Calendrier, { type Suivi } from './Calendrier';
 import EcrituresInventaire, { type Ecriture, type EstimationIs } from './EcrituresInventaire';
 import ActionsCloture from './ActionsCloture';
 
-export const metadata = { title: 'Clôture — Hipla Gestion' };
+export const metadata = { title: 'Clôture — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 /**

@@ -11,7 +11,7 @@ import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import { dateLong } from '@/lib/format';
 
-export const metadata = { title: 'Accueil — Hipla Gestion' };
+export const metadata = { title: 'Accueil — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 /**

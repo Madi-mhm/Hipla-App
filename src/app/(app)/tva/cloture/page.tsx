@@ -7,7 +7,7 @@ import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import ClotureTva, { type Declaration } from './ClotureTva';
 
-export const metadata = { title: 'Déclarations de TVA — Hipla Gestion' };
+export const metadata = { title: 'Déclarations de TVA — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {

@@ -6,7 +6,7 @@ import { peut } from '@/lib/permissions';
 import JustificatifsQonto from './JustificatifsQonto';
 import type { Categorie } from '@/lib/types';
 
-export const metadata = { title: 'Justificatifs Qonto — Hipla Gestion' };
+export const metadata = { title: 'Justificatifs Qonto — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 /**

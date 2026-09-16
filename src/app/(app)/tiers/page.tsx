@@ -6,7 +6,7 @@ import { peut } from '@/lib/permissions';
 import ListeTiers, { type Activite } from './ListeTiers';
 import type { Tiers } from '@/lib/registre';
 
-export const metadata = { title: 'Tiers — Hipla Gestion' };
+export const metadata = { title: 'Tiers — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 /**

@@ -48,7 +48,7 @@ export default function MonCompte({ nom, email, role }: { nom: string; email: st
       if (x.status !== 'verified') await supabase.auth.mfa.unenroll({ factorId: x.id });
     }
     const { data, error } = await supabase.auth.mfa.enroll({
-      factorType: 'totp', friendlyName: `Hipla Gestion ${new Date().toISOString().slice(0, 10)}`,
+      factorType: 'totp', friendlyName: `Hipla Compta ${new Date().toISOString().slice(0, 10)}`,
     });
     setEnCours(false);
     if (error || !data) { setErreur(`Activation impossible : ${error?.message}`); return; }

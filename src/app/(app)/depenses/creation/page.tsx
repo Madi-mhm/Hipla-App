@@ -6,7 +6,7 @@ import { peut } from '@/lib/permissions';
 import TableauFrais from './TableauFrais';
 import type { Categorie, FraisCreation } from '@/lib/types';
 
-export const metadata = { title: 'Frais de création — Hipla Gestion' };
+export const metadata = { title: 'Frais de création — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {

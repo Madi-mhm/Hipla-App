@@ -6,7 +6,7 @@ import { peut } from '@/lib/permissions';
 import Exports from './Exports';
 import type { Categorie } from '@/lib/types';
 
-export const metadata = { title: 'Exports — Hipla Gestion' };
+export const metadata = { title: 'Exports — Hipla Compta' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {

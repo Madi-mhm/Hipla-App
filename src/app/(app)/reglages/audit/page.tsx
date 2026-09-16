@@ -5,7 +5,7 @@ import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import JournalAudit from './JournalAudit';
 
-export const metadata = { title: "Journal d'audit — Hipla Gestion" };
+export const metadata = { title: "Journal d'audit — Hipla Compta" };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
