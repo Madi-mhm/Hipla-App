@@ -8,7 +8,7 @@ import { aujourdhuiIso } from '@/lib/dates';
 import FormulaireDeplacement from './FormulaireDeplacement';
 import type { Vehicule } from '@/lib/types';
 
-export const metadata = { title: 'Nouveau trajet — Hipla Compta' };
+export const metadata = { title: 'Nouveau trajet — Hipla Comptable' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page(

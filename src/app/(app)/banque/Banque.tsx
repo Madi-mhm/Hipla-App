@@ -304,7 +304,7 @@ export default function Banque({
               {enCours ? 'Synchronisation…' : 'Synchroniser maintenant'}
             </button>
             <span className="muted" style={{ fontSize: 'var(--fs-xs)', alignSelf: 'center' }}>
-              Automatique chaque nuit à 4 h
+              Automatique chaque soir à 23 h 30
             </span>
           </div>
         )}

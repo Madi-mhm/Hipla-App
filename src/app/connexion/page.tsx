@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import ForumConnexion from './ForumConnexion';
 import styles from './connexion.module.css';
 
-export const metadata = { title: 'Connexion — Hipla Compta' };
+export const metadata = { title: 'Connexion — Hipla Comptable' };
 
 /**
  * useSearchParams() bascule le rendu côté client. Sans limite de Suspense,
@@ -15,7 +15,7 @@ export default function Page() {
       <div className={styles.carte}>
         <div className={styles.marque}>
           <span className={styles.marqueNom}>HIPLA</span>
-          <span className={styles.marqueSuite}>GESTION</span>
+          <span className={styles.marqueSuite}>COMPTABLE</span>
         </div>
         <p className={styles.intro}>
           Application de gestion interne. Accès réservé.

@@ -6,7 +6,7 @@ import { peut } from '@/lib/permissions';
 import Banque from './Banque';
 import type { TransactionQonto, Synchronisation, Categorie } from '@/lib/types';
 
-export const metadata = { title: 'Banque — Hipla Compta' };
+export const metadata = { title: 'Banque — Hipla Comptable' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {

@@ -1,4 +1,4 @@
-# Hipla Compta — app.hipla.fr
+# Hipla Comptable — comptable.hipla.fr
 
 Application de gestion et de comptabilité de **Hipla Services SAS**.
 Next.js 15 + Supabase (PostgreSQL), hébergée sur Vercel.
@@ -77,12 +77,14 @@ Principes qui ne se négocient pas :
 
 | Tâche | Route | Horaire (UTC) |
 |---|---|---|
-| Synchronisation Qonto | `/api/qonto` | tous les jours, 04:00 |
+| Synchronisation Qonto | `/api/qonto?soir=ete` et `?soir=hiver` | 21:30 et 22:30 : seul le passage qui tombe à 23 h 30 à Paris synchronise (l’été, puis l’hiver) |
 | Sauvegarde vers R2 | `/api/cron/sauvegarde` | dimanche et mercredi, 03:00 |
 
 Elles se déclenchent aussi à la main (bouton « Synchroniser » en Banque,
 « Sauvegarder maintenant » en Réglages → Sauvegardes) ou depuis Vercel →
-Settings → Cron Jobs → Run.
+Settings → Cron Jobs → Run. Depuis Vercel, la synchronisation Qonto ne
+part qu'entre 23 h et minuit à Paris ; le reste du temps, utiliser le
+bouton de l'application.
 
 ## Déploiement
 

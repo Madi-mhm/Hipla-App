@@ -19,3 +19,11 @@ export function isoLocal(d: Date): string {
 export function dateParis(horodatage: string): string {
   return new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris' }).format(new Date(horodatage));
 }
+
+/** L'heure qu'il est à Paris (0 à 23), heure d'été comprise. */
+export function heureParis(): number {
+  const h = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Paris', hour: 'numeric', hourCycle: 'h23',
+  }).formatToParts(new Date()).find((p) => p.type === 'hour');
+  return Number(h?.value);
+}

@@ -8,7 +8,7 @@ import ListeFactures from './ListeFactures';
 import type { Facture, Prestation } from '@/lib/types';
 import type { Tiers } from '@/lib/registre';
 
-export const metadata = { title: 'Ventes — Hipla Compta' };
+export const metadata = { title: 'Ventes — Hipla Comptable' };
 export const dynamic = 'force-dynamic';
 
 /**

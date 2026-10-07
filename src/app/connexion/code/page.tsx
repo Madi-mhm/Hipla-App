@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import CodeConnexion from './CodeConnexion';
 import styles from '../connexion.module.css';
 
-export const metadata = { title: 'Code de connexion — Hipla Compta' };
+export const metadata = { title: 'Code de connexion — Hipla Comptable' };
 
 /** Deuxième étape de la connexion, pour un compte en double authentification. */
 export default function Page() {
@@ -11,7 +11,7 @@ export default function Page() {
       <div className={styles.carte}>
         <div className={styles.marque}>
           <span className={styles.marqueNom}>HIPLA</span>
-          <span className={styles.marqueSuite}>GESTION</span>
+          <span className={styles.marqueSuite}>COMPTABLE</span>
         </div>
         <p className={styles.intro}>
           Saisissez le code à six chiffres affiché par votre application

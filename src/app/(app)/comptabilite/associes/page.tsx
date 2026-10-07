@@ -6,7 +6,7 @@ import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import { money } from '@/lib/format';
 
-export const metadata = { title: 'Associés — Hipla Compta' };
+export const metadata = { title: 'Associés — Hipla Comptable' };
 export const dynamic = 'force-dynamic';
 
 /**

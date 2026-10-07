@@ -5,7 +5,7 @@ import { peut } from '@/lib/permissions';
 import { redirect } from 'next/navigation';
 import FicheEntreprise, { type Entreprise, type Exercice } from './FicheEntreprise';
 
-export const metadata = { title: 'Entreprise — Hipla Compta' };
+export const metadata = { title: 'Entreprise — Hipla Comptable' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {

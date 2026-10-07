@@ -13,7 +13,7 @@ import AvisBareme from '@/components/AvisBareme';
 import ConstaterKm, { type EtatKm } from './ConstaterKm';
 import AnnulerTrajet from './AnnulerTrajet';
 
-export const metadata = { title: 'Déplacements — Hipla Compta' };
+export const metadata = { title: 'Déplacements — Hipla Comptable' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {

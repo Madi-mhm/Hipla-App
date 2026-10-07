@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cronAutorise } from '@/lib/cron';
-import { dateParis } from '@/lib/dates';
+import { dateParis, heureParis } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -69,6 +69,13 @@ function entetesQonto() {
 export async function GET(request: NextRequest) {
   if (!cronAutorise(request.headers.get('authorization'))) {
     return NextResponse.json({ erreur: 'Non autorisé' }, { status: 401 });
+  }
+  // Vercel planifie en UTC : 23 h 30 à Paris tombe à 21 h 30 UTC l'été et
+  // à 22 h 30 l'hiver. Les deux créneaux sont déclarés dans vercel.json ;
+  // seul celui qui tombe entre 23 h et minuit à Paris synchronise.
+  // L'autre s'arrête ici, sans laisser de trace dans `synchronisations`.
+  if (request.nextUrl.searchParams.has('soir') && heureParis() !== 23) {
+    return NextResponse.json({ succes: true, ignoree: 'hors du créneau de 23 h à Paris' });
   }
   return synchroniser('cron');
 }

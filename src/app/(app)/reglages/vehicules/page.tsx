@@ -6,7 +6,7 @@ import { peut } from '@/lib/permissions';
 import GestionVehicules, { type LigneBareme } from './GestionVehicules';
 import type { Vehicule } from '@/lib/types';
 
-export const metadata = { title: 'Véhicules — Hipla Compta' };
+export const metadata = { title: 'Véhicules — Hipla Comptable' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {

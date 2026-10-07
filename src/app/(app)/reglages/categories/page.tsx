@@ -6,7 +6,7 @@ import { peut } from '@/lib/permissions';
 import GestionCategories from './GestionCategories';
 import type { Categorie } from '@/lib/types';
 
-export const metadata = { title: 'Catégories — Hipla Compta' };
+export const metadata = { title: 'Catégories — Hipla Comptable' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {

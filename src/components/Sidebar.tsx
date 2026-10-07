@@ -57,7 +57,7 @@ export default function Sidebar({ role, exercice }: { role: Role; exercice: stri
       >
         <Link href="/" className={styles.marque}>
           <span className={styles.marqueNom}>HIPLA</span>
-          <span className={styles.marqueSuite}>GESTION</span>
+          <span className={styles.marqueSuite}>COMPTABLE</span>
         </Link>
 
         <nav className={styles.nav} aria-label="Navigation principale">

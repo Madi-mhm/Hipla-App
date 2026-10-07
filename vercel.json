@@ -2,8 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "path": "/api/qonto",
-      "schedule": "0 4 * * *"
+      "path": "/api/qonto?soir=ete",
+      "schedule": "30 21 * * *"
+    },
+    {
+      "path": "/api/qonto?soir=hiver",
+      "schedule": "30 22 * * *"
     },
     {
       "path": "/api/cron/sauvegarde",

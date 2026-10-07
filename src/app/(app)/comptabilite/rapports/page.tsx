@@ -6,7 +6,7 @@ import { profilCourant } from '@/lib/auth';
 import { peut } from '@/lib/permissions';
 import Rapports, { type Mois } from './Rapports';
 
-export const metadata = { title: 'Rapports mensuels — Hipla Compta' };
+export const metadata = { title: 'Rapports mensuels — Hipla Comptable' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
