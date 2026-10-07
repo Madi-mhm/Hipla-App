@@ -8380,6 +8380,16 @@ begin
   where  etat = 'validee' and nature in ('achat','creation','km')
     and  regime_tva = 'france' and montant_regle >= montant_ttc - 0.005;
 
+  -- CORRECTIF 20261007a : la déclaration compte aussi la TVA
+  -- autoliquidée déductible (Vercel, Anthropic…) ; les pièces non.
+  -- L'écart, égal à cette TVA, n'était pas une erreur de saisie.
+  -- Mêmes conditions que v_tva_exigible (autoliquidation_deduite).
+  v_tva_ecr := v_tva_ecr + (
+    select coalesce(sum(abs(tva_autoliquidee)), 0)
+    from   public.pieces
+    where  etat = 'validee' and regime_tva = 'autoliquidation'
+      and  tva_autoliquidee > 0);
+
   -- CORRECTIF MIGRATION 104 : on ne restreint plus à
   -- fait_generateur = 'reglement'. Un bien (fait_generateur =
   -- 'date_piece') porte, lui aussi, de la TVA déductible réellement
