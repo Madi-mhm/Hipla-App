@@ -45,6 +45,68 @@ type TransactionQonto = {
   counterparty_name?: string | null;
 };
 
+/** Ce que la synchronisation écrit dans `transactions_qonto`. */
+type LigneQonto = ReturnType<typeof versLigne>;
+
+/** Les colonnes qui viennent de Qonto, comparées avant toute écriture. */
+const CHAMPS_QONTO = [
+  'qonto_id', 'date_operation', 'date_valeur', 'libelle', 'contrepartie',
+  'reference', 'montant', 'sens', 'devise', 'statut_qonto', 'categorie_qonto',
+  'a_justificatif', 'qonto_uuid', 'attachment_ids',
+] as const;
+
+/** Ce qui peut encore changer sur une opération consolidée. */
+const CHAMPS_TECHNIQUES = ['qonto_uuid', 'attachment_ids', 'a_justificatif'] as const;
+
+type LigneConnue = { id: string } & Record<(typeof CHAMPS_QONTO)[number], unknown> & {
+  qonto_id: string; statut_qonto: string;
+};
+
+function versLigne(t: TransactionQonto) {
+  return {
+    qonto_id: t.transaction_id,
+    // Jour de Paris : l'horodatage Qonto est en UTC, un paiement
+    // passé entre minuit et 2 h tombait sur la veille.
+    date_operation: dateParis(t.settled_at ?? t.emitted_at),
+    date_valeur: t.settled_at ? dateParis(t.settled_at) : null,
+    libelle: t.label,
+    contrepartie: t.counterparty_name ?? null,
+    reference: t.reference ?? null,
+    // `amount` est exprimé dans la devise du compte ; `local_amount`
+    // conserve la devise d'origine. Une opération en dollars doit
+    // être comptabilisée pour son montant réellement débité en euros.
+    montant: Math.abs(
+      t.amount != null ? Number(t.amount)
+      : t.amount_cents != null ? Number(t.amount_cents) / 100
+      : 0
+    ),
+    sens: t.side,
+    devise: t.currency ?? 'EUR',
+    statut_qonto: normaliserStatut(t.status),
+    categorie_qonto: t.category ?? null,
+    a_justificatif: (t.attachment_ids ?? []).length > 0,
+    // La liste des transactions fournit déjà ces identifiants :
+    // les mémoriser évite un appel au détail par opération, et
+    // c'est cet appel qui échouait en 404.
+    qonto_uuid: t.id ?? null,
+    attachment_ids: t.attachment_ids ?? null,
+    // Date du dernier changement venu de Qonto, plus de chaque passage.
+    synchronise_le: new Date().toISOString(),
+  };
+}
+
+/**
+ * Même valeur en base et chez Qonto ? Dans le doute, la réponse est non :
+ * une écriture de trop ne coûte rien, une mise à jour manquée si.
+ */
+function identiques(enBase: unknown, qonto: unknown): boolean {
+  const a = enBase ?? null, b = qonto ?? null;
+  if (a === null || b === null) return a === b;
+  if (typeof b === 'number') return Number(a) === b;
+  if (Array.isArray(a) || Array.isArray(b)) return JSON.stringify(a) === JSON.stringify(b);
+  return a === b;
+}
+
 function admin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const cle = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -124,11 +186,17 @@ async function synchroniser(declencheur: 'cron' | 'manuel') {
     if (comptes.length === 0) throw new Error('Aucun compte bancaire trouvé.');
 
     let soldeTotal = 0;
-    let lues = 0, nouvelles = 0, auto = 0;
-    const nouveauxIds: string[] = [];
+    let lues = 0, nouvelles = 0, misesAJour = 0, auto = 0;
+    const echecsEcriture: string[] = [];
     const parStatut: Record<string, number> = {};
 
-    // ---- 2. Transactions, compte par compte ----
+    // ---- 2. Transactions : tout lire chez Qonto, puis écrire en lot ----
+    // Une requête par opération et par nuit, depuis l'ouverture du compte,
+    // c'était une demi-seconde par opération : la synchronisation aurait
+    // dépassé sa durée maximale vers deux cents opérations. On lit
+    // désormais la base une fois, on n'écrit que ce qui a changé.
+    const lignes = new Map<string, LigneQonto>();
+
     for (const compte of comptes) {
       soldeTotal += Number(compte.balance ?? 0);
       const iban = compte.iban;
@@ -158,78 +226,74 @@ async function synchroniser(declencheur: 'cron' | 'manuel') {
         for (const t of lot) {
           const st = normaliserStatut(t.status);
           parStatut[st] = (parStatut[st] ?? 0) + 1;
-        }
-
-        for (const t of lot) {
-          // L'identifiant Qonto sert de clé : une transaction déjà connue
-          // n'est jamais dupliquée, même après plusieurs synchronisations.
-          const { data: existante } = await db
-            .from('transactions_qonto')
-            .select('id, statut_qonto')
-            .eq('qonto_id', t.transaction_id)
-            .maybeSingle();
-
-          const ligne = {
-            qonto_id: t.transaction_id,
-            // Jour de Paris : l'horodatage Qonto est en UTC, un paiement
-            // passé entre minuit et 2 h tombait sur la veille.
-            date_operation: dateParis(t.settled_at ?? t.emitted_at),
-            date_valeur: t.settled_at ? dateParis(t.settled_at) : null,
-            libelle: t.label,
-            contrepartie: t.counterparty_name ?? null,
-            reference: t.reference ?? null,
-            // `amount` est exprimé dans la devise du compte ; `local_amount`
-            // conserve la devise d'origine. Une opération en dollars doit
-            // être comptabilisée pour son montant réellement débité en euros.
-            montant: Math.abs(
-              t.amount != null ? Number(t.amount)
-              : t.amount_cents != null ? Number(t.amount_cents) / 100
-              : 0
-            ),
-            sens: t.side,
-            devise: t.currency ?? 'EUR',
-            statut_qonto: normaliserStatut(t.status),
-            categorie_qonto: t.category ?? null,
-            a_justificatif: (t.attachment_ids ?? []).length > 0,
-            // La liste des transactions fournit déjà ces identifiants :
-            // les mémoriser évite un appel au détail par opération, et
-            // c'est cet appel qui échouait en 404.
-            qonto_uuid: t.id ?? null,
-            attachment_ids: t.attachment_ids ?? null,
-            synchronise_le: new Date().toISOString(),
-          };
-
-          if (existante) {
-            if (existante.statut_qonto !== 'completed') {
-              // Une opération en attente peut encore changer de montant ou
-              // de libellé : on la met à jour tant qu'elle n'est pas
-              // consolidée.
-              await db.from('transactions_qonto').update(ligne).eq('id', existante.id);
-            } else {
-              // Une opération consolidée est figée quant à son montant, mais
-              // les identifiants techniques, eux, peuvent manquer : ils
-              // n'étaient pas relevés avant. Sans cette mise à jour, une
-              // opération déjà connue ne les recevrait JAMAIS, quel que soit
-              // le nombre de synchronisations.
-              await db.from('transactions_qonto').update({
-                qonto_uuid: ligne.qonto_uuid,
-                attachment_ids: ligne.attachment_ids,
-                a_justificatif: ligne.a_justificatif,
-                synchronise_le: ligne.synchronise_le,
-              }).eq('id', existante.id);
-            }
-            continue;
-          }
-
-          const { data: creee } = await db
-            .from('transactions_qonto').insert(ligne).select('id').single();
-          if (creee) { nouvelles += 1; nouveauxIds.push(creee.id); }
+          // Une opération arrivée pendant la lecture décale les pages et
+          // peut faire revenir la même : on ne la garde qu'une fois.
+          if (!lignes.has(t.transaction_id)) lignes.set(t.transaction_id, versLigne(t));
         }
 
         encore = lot.length === 100;
         page += 1;
       }
     }
+
+    // L'identifiant Qonto sert de clé : une transaction déjà connue n'est
+    // jamais dupliquée, même après plusieurs synchronisations.
+    const connues = new Map<string, LigneConnue>();
+    const cles = [...lignes.keys()];
+    for (let i = 0; i < cles.length; i += 100) {
+      const { data, error } = await db
+        .from('transactions_qonto')
+        .select(`id, ${CHAMPS_QONTO.join(', ')}`)
+        .in('qonto_id', cles.slice(i, i + 100));
+      // Sans cette lecture, tout paraîtrait nouveau : on s'arrête.
+      if (error) throw new Error(`Lecture des opérations connues : ${error.message}`);
+      for (const x of (data ?? []) as unknown as LigneConnue[]) connues.set(x.qonto_id, x);
+    }
+
+    const aCreer: LigneQonto[] = [];
+    const aModifier: Array<{ id: string; champs: Partial<LigneQonto> }> = [];
+
+    for (const ligne of lignes.values()) {
+      const existante = connues.get(ligne.qonto_id);
+      if (!existante) { aCreer.push(ligne); continue; }
+
+      // Une opération en attente peut encore changer de montant ou de
+      // libellé : elle suit Qonto tant qu'elle n'est pas consolidée. Une
+      // opération consolidée est figée quant à son montant ; seuls ses
+      // identifiants techniques et ses pièces jointes peuvent encore
+      // arriver.
+      const suivis = existante.statut_qonto !== 'completed' ? CHAMPS_QONTO : CHAMPS_TECHNIQUES;
+      if (suivis.some((c) => !identiques(existante[c], ligne[c]))) {
+        const champs: Partial<LigneQonto> = { synchronise_le: ligne.synchronise_le };
+        for (const c of suivis) (champs as Record<string, unknown>)[c] = ligne[c];
+        aModifier.push({ id: existante.id, champs });
+      }
+    }
+
+    // Création en un seul envoi, dans l'ordre de Qonto : le déclencheur
+    // numérote les pièces BAN ligne après ligne, comme avant. Si le lot
+    // est refusé, on reprend ligne par ligne pour ne perdre que la fautive.
+    if (aCreer.length > 0) {
+      const { data: creees, error } = await db
+        .from('transactions_qonto').insert(aCreer).select('id');
+      if (!error) {
+        nouvelles += creees?.length ?? 0;
+      } else {
+        for (const ligne of aCreer) {
+          const { error: e } = await db.from('transactions_qonto').insert(ligne);
+          if (e) echecsEcriture.push(`${ligne.qonto_id} : ${e.message}`);
+          else nouvelles += 1;
+        }
+      }
+    }
+
+    // Peu de lignes changent d'une nuit à l'autre : on les envoie ensemble.
+    const resultats = await Promise.all(aModifier.map((m) =>
+      db.from('transactions_qonto').update(m.champs).eq('id', m.id)));
+    resultats.forEach((r, i) => {
+      if (r.error) echecsEcriture.push(`${aModifier[i].id} : ${r.error.message}`);
+      else misesAJour += 1;
+    });
 
     // Les abonnements ont été retirés de l'application : la synchronisation
     // ne crée plus d'écriture d'office à partir d'une échéance. Chaque
@@ -288,6 +352,8 @@ async function synchroniser(declencheur: 'cron' | 'manuel') {
           par_statut: parStatut,
           justificatifs: justificatifsTraites,
           justificatifs_echecs: echecsJustificatifs,
+          mises_a_jour: misesAJour,
+          ecritures_echouees: echecsEcriture,
           rapprochements_proposes: proposees,
           ambigues: balayage.ambigues ?? 0,
           inexpliquees: balayage.restantes ?? 0,
@@ -297,7 +363,8 @@ async function synchroniser(declencheur: 'cron' | 'manuel') {
 
     return NextResponse.json({
       succes: true,
-      lues, nouvelles,
+      lues, nouvelles, mises_a_jour: misesAJour,
+      ecritures_echouees: echecsEcriture,
       rapprochees_auto: auto,
       propositions: proposees,
       solde: soldeTotal,
